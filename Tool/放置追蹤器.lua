@@ -2,6 +2,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 
 -- === 裝置檢測 ===
@@ -56,6 +57,177 @@ local ScriptSettings = {
 	AutoReplay = true,
 }
 
+local currentLang = "en"  -- default，若讀取失敗保持 EN
+do
+	local API_VAR_PATH = "Tsetingnil_script/NTD/API_VAR.json"
+	pcall(function()
+		if isfile and isfile(API_VAR_PATH) and readfile then
+			local raw = readfile(API_VAR_PATH)
+			if raw and raw ~= "" then
+				local ok, data = pcall(HttpService.JSONDecode, HttpService, raw)
+				if ok and type(data) == "table" and data.language then
+					local lang = tostring(data.language):upper()
+					if lang == "CHINESE" then
+						currentLang = "zh"
+					elseif lang == "ENGLISH" then
+						currentLang = "en"
+					end
+				end
+			end
+		end
+	end)
+end
+local Lang = {
+	zh = {
+		titleMain        = "新手塔房 | 排程追蹤器",
+		titleParam       = "  ⚙️ 參數設定",
+		titleSave        = "  💾 儲存腳本",
+		titleManage      = "  📁 腳本管理",
+		btnCopy          = "📋 複製",
+		btnCopied        = "✅ 已複製",
+		btnSave          = "💾 儲存",
+		btnParam         = "⚙️ 參數",
+		btnRefresh       = "🔄 刷新",
+		btnReset         = "🔄 重置追蹤器",
+		btnDebug         = "🔍 塔追蹤清單",
+		btnConfirmSave   = "✅ 確認儲存",
+		btnCancel        = "❌ 取消",
+		toggleOn         = "開",
+		toggleOff        = "關",
+		lblInterface     = "📜 介面設定",
+		lblAutoScroll    = "自動捲軸",
+		lblGameInfo      = "ℹ️ 遊戲資訊",
+		lblTrackerOp     = "🛠️ 追蹤器操作",
+		lblScriptParam   = "📝 腳本參數",
+		lblAutoReplay    = "自動重播 (AutoReplay)",
+		lblFileName      = "輸入腳本名稱:",
+		phFileName       = "輸入腳本名稱...",
+		infoFmt          = "地圖: %s\n難易度: %s\n效果: %s",
+		logNoOps         = "⚠️ 沒有可生成的操作記錄",
+		logSaved         = "✅ 已儲存: %s",
+		logSaveFailed    = "❌ 儲存失敗: %s",
+		logNoScripts     = "尚無已儲存的腳本",
+		logCopied        = "📋 已複製: %s",
+		logDeleted       = "🗑️ 已刪除: %s",
+		logCopyOk        = "✅ 腳本已複製到剪貼板！",
+		logCopyConsole   = "⚠️ 腳本已輸出到控制台（F9查看）",
+		logInvalidName   = "⚠️ 請輸入有效的腳本名稱",
+		logReset         = "🔄 追蹤器已重置",
+		logTowerListHdr  = "=== 塔追蹤清單 ===",
+		logNoRecord      = "  (無記錄)",
+		logReady         = "⏳ Ready 已送出，請選擇難易度...",
+		logSkipWave      = "跳過關卡  +%.1fs",
+		logSpeedSet      = "速度設定: %dx  +%.1fs",
+		logDiffStart     = "難易度選擇: %s → 開始計時",
+		logDiffUpdate    = "難易度更新: %s",
+		logModAdd        = "效果套用: %s",
+		logModRemove     = "效果移除: %s，當前: %s",
+		logWaitReady     = "⏳ 等待 Ready...",
+		logFlow          = "📋 流程：Ready → 選擇難易度 → 自動開始計時",
+		logGameEnd       = "🏁 遊戲結束  總時間: %dm %ds (%.1fs)",
+		logStarted       = "🎉 追蹤系統已啟動！地圖: %s  難易度: %s  效果: %s",
+		logInitFailed    = "❌ 追蹤系統初始化失敗（可能不在遊戲中）",
+		logPlaceTower    = "放置塔 #%d: %s  +%.1fs",
+		logPlaceFailed   = "⚠️ 放置塔失敗: %s (伺服器拒絕)",
+		logUpgrade       = "升級塔 #%d: %s  +%.1fs",
+		logUpgradeUnknown= "升級塔 [id:%s] (未追蹤)  +%.1fs",
+		logSell          = "刪除塔 #%d: %s  +%.1fs",
+		logSellUnknown   = "刪除塔 [id:%s] (未追蹤)  +%.1fs",
+		logAbility       = "塔能力 #%d %s: %s  +%.1fs",
+		logAbilityUnknown= "塔能力 [id:%s] %s (未追蹤)  +%.1fs",
+		logTowerItem     = "  #%d %s [id=%s] +%.1fs",
+	},
+	en = {
+		titleMain        = "Noob Tower | Tracker",
+		titleParam       = "  ⚙️ Parameters",
+		titleSave        = "  💾 Save Script",
+		titleManage      = "  📁 Script Manager",
+		btnCopy          = "📋 Copy",
+		btnCopied        = "✅ Copied",
+		btnSave          = "💾 Save",
+		btnParam         = "⚙️ Params",
+		btnRefresh       = "🔄 Refresh",
+		btnReset         = "🔄 Reset",
+		btnDebug         = "🔍 Tower List",
+		btnConfirmSave   = "✅ Confirm",
+		btnCancel        = "❌ Cancel",
+		toggleOn         = "ON",
+		toggleOff        = "OFF",
+		lblInterface     = "📜 Interface",
+		lblAutoScroll    = "Auto Scroll",
+		lblGameInfo      = "ℹ️ Game Info",
+		lblTrackerOp     = "🛠️ Tracker Ops",
+		lblScriptParam   = "📝 Script Params",
+		lblAutoReplay    = "Auto Replay",
+		lblFileName      = "Script name:",
+		phFileName       = "Enter script name...",
+		infoFmt          = "Map: %s\nDifficulty: %s\nModifier: %s",
+		logNoOps         = "⚠️ No operations recorded",
+		logSaved         = "✅ Saved: %s",
+		logSaveFailed    = "❌ Save failed: %s",
+		logNoScripts     = "No saved scripts",
+		logCopied        = "📋 Copied: %s",
+		logDeleted       = "🗑️ Deleted: %s",
+		logCopyOk        = "✅ Script copied to clipboard!",
+		logCopyConsole   = "⚠️ Script printed to console (F9)",
+		logInvalidName   = "⚠️ Please enter a valid script name",
+		logReset         = "🔄 Tracker reset",
+		logTowerListHdr  = "=== Tower List ===",
+		logNoRecord      = "  (empty)",
+		logReady         = "⏳ Ready sent, select difficulty...",
+		logSkipWave      = "Skip wave  +%.1fs",
+		logSpeedSet      = "Speed: %dx  +%.1fs",
+		logDiffStart     = "Difficulty: %s → Timer started",
+		logDiffUpdate    = "Difficulty updated: %s",
+		logModAdd        = "Modifier added: %s",
+		logModRemove     = "Modifier removed: %s, current: %s",
+		logWaitReady     = "⏳ Waiting for Ready...",
+		logFlow          = "📋 Flow: Ready → Select difficulty → Timer starts",
+		logGameEnd       = "🏁 Game ended  Total: %dm %ds (%.1fs)",
+		logStarted       = "🎉 Tracker started! Map: %s  Difficulty: %s  Modifier: %s",
+		logInitFailed    = "❌ Tracker init failed (not in game?)",
+		logPlaceTower    = "Place #%d: %s  +%.1fs",
+		logPlaceFailed   = "⚠️ Place failed: %s (rejected)",
+		logUpgrade       = "Upgrade #%d: %s  +%.1fs",
+		logUpgradeUnknown= "Upgrade [id:%s] (untracked)  +%.1fs",
+		logSell          = "Sell #%d: %s  +%.1fs",
+		logSellUnknown   = "Sell [id:%s] (untracked)  +%.1fs",
+		logAbility       = "Ability #%d %s: %s  +%.1fs",
+		logAbilityUnknown= "Ability [id:%s] %s (untracked)  +%.1fs",
+		logTowerItem     = "  #%d %s [id=%s] +%.1fs",
+	}
+}
+
+local function T(key) return Lang[currentLang][key] or key end
+
+local i18nElements   = {}
+local i18nToggleBtns = {}
+local infoLabel  -- forward declaration
+
+local function bindText(obj, key, prop)
+	prop = prop or "Text"
+	obj[prop] = T(key)
+	table.insert(i18nElements, { obj = obj, key = key, prop = prop })
+end
+
+local function updateInfoLabel()
+	if infoLabel then
+		infoLabel.Text = T("infoFmt"):format(gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier)
+	end
+end
+
+local function updateI18n()
+	for _, b in ipairs(i18nElements) do
+		b.obj[b.prop] = T(b.key)
+	end
+	for _, tb in ipairs(i18nToggleBtns) do
+		local isOn = tb.getState()
+		tb.btn.Text       = isOn and T("toggleOn") or T("toggleOff")
+		tb.btn.TextColor3 = isOn and Theme.TextDark or Theme.TextDim
+	end
+	updateInfoLabel()
+end
+
 -- === 追蹤狀態 ===
 local PlaceTowerRemote   = nil
 local UpgradeTowerRemote = nil
@@ -80,9 +252,9 @@ local lastDetectedSpeed = 1
 local DEBUG_MODE = false
 
 -- === 遊戲狀態追蹤 ===
-local isGameRunning = false  -- GameRunning 是否為 true（用來防止遊戲未開始就記錄）
-local gameStartTime = nil    -- 遊戲開始時的 tick()（用於計算操作的 elapsed 時間）
-local gameEndElapsed = nil   -- 遊戲結束時的總 elapsed 秒數
+local isGameRunning = false
+local gameStartTime = nil
+local gameEndElapsed = nil
 
 -- === 腳本生成設定 ===
 local timeRoundUp          = false
@@ -90,11 +262,10 @@ local customComment        = ""
 local script_SpeedMultiplier = 1
 local autoScrollEnabled    = true
 local SCRIPT_SAVE_PATH     = "Tsetingnil_script/NTD/Script"
-local NTD_API_URL          = "https://gist.githubusercontent.com/Tseting-nil/926f998ae1ee6f107fb561362d023b35/raw/9dd6fd18b0198add8267d59b3efe5aaaa50dab72/%25E6%2596%25B0%25E6%2589%258B%25E5%25A1%2594%25E6%2588%25BFAPI.lua"
+local NTD_API_URL          = "https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/%E5%AF%86%E9%91%B0%E7%B3%BB%E7%B5%B1.lua"
 
 local uiVisible = true
 
--- 回傳遊戲開始後經過的秒數
 local function getElapsed()
 	if not gameStartTime then return 0 end
 	return tick() - gameStartTime
@@ -157,15 +328,38 @@ titleSeparator.BorderSizePixel = 0
 titleSeparator.Parent = titleBar
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -50, 1, 0)
+title.Size = UDim2.new(1, -90, 1, 0)
 title.BackgroundTransparency = 1
-title.Text = "新手塔房 | 排程追蹤器"
 title.TextColor3 = Theme.Accent
 title.Font = Theme.FontBold
 title.TextSize = Theme.SizeLarge
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Position = UDim2.new(0, 10, 0, 0)
 title.Parent = titleBar
+bindText(title, "titleMain")
+
+local langBtn = Instance.new("TextButton")
+langBtn.Size = UDim2.new(0, 35, 0, 35)
+langBtn.Position = UDim2.new(1, -80, 0, 5)
+langBtn.Text = currentLang == "zh" and "EN" or "中"
+langBtn.BackgroundColor3 = Theme.SurfaceHighlight
+langBtn.TextColor3 = Theme.Accent
+langBtn.Font = Theme.FontBold
+langBtn.TextSize = 13
+langBtn.BorderSizePixel = 0
+langBtn.Parent = titleBar
+do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = langBtn end
+
+langBtn.MouseButton1Click:Connect(function()
+	if currentLang == "zh" then
+		currentLang = "en"
+		langBtn.Text = "中"
+	else
+		currentLang = "zh"
+		langBtn.Text = "EN"
+	end
+	updateI18n()
+end)
 
 local minimizeBtn = Instance.new("TextButton")
 minimizeBtn.Size = UDim2.new(0, 35, 0, 35)
@@ -177,8 +371,6 @@ minimizeBtn.Font = Theme.FontBold
 minimizeBtn.TextSize = 22
 minimizeBtn.BorderSizePixel = 0
 minimizeBtn.Parent = titleBar
-Instance.new("UICorner").CornerRadius = UDim.new(0, 8)
-Instance.new("UICorner").Parent = minimizeBtn
 do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = minimizeBtn end
 
 -- 滾動框架
@@ -224,10 +416,9 @@ buttonLayout.SortOrder = Enum.SortOrder.LayoutOrder
 buttonLayout.Padding = UDim.new(0, 6)
 buttonLayout.Parent = buttonContainer
 
-local function makeBtn(text, bgColor, txtColor, order, widthScale)
+local function makeBtn(textKey, bgColor, txtColor, order, widthScale)
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(widthScale or 0.25, -5, 1, 0)
-	btn.Text = text
 	btn.BackgroundColor3 = bgColor
 	btn.TextColor3 = txtColor
 	btn.Font = Theme.FontBold
@@ -236,14 +427,14 @@ local function makeBtn(text, bgColor, txtColor, order, widthScale)
 	btn.LayoutOrder = order
 	btn.Parent = buttonContainer
 	local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = btn
+	bindText(btn, textKey)
 	return btn
 end
 
-local copyBtn   = makeBtn("📋 複製", Theme.Success,         Theme.TextDark, 1, 0.34)
-local saveBtn   = makeBtn("💾 儲存", Theme.Accent,          Theme.Text,     2, 0.34)
-local Parameter = makeBtn("⚙️ 參數", Theme.SurfaceHighlight,Theme.Text,     3, 0.32)
+local copyBtn   = makeBtn("btnCopy",  Theme.Success,          Theme.TextDark, 1, 0.34)
+local saveBtn   = makeBtn("btnSave",  Theme.Accent,           Theme.Text,     2, 0.34)
+local Parameter = makeBtn("btnParam", Theme.SurfaceHighlight, Theme.Text,     3, 0.32)
 
--- resetBtn / debugBtn 移至參數設置介面，先宣告供後續事件使用
 local resetBtn
 local debugBtn
 
@@ -297,13 +488,13 @@ do local f = Instance.new("Frame"); f.Size = UDim2.new(1,0,0,10); f.Position = U
 local paramTitle = Instance.new("TextLabel")
 paramTitle.Size = UDim2.new(0.8, 0, 1, 0)
 paramTitle.BackgroundTransparency = 1
-paramTitle.Text = "  ⚙️ 參數設定"
 paramTitle.TextColor3 = Theme.Text
 paramTitle.Font = Theme.FontBold
 paramTitle.TextSize = Theme.SizeLarge
 paramTitle.TextXAlignment = Enum.TextXAlignment.Left
 paramTitle.ZIndex = 12
 paramTitle.Parent = paramTitleBar
+bindText(paramTitle, "titleParam")
 
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 35, 0, 35)
@@ -365,13 +556,13 @@ do local f = Instance.new("Frame"); f.Size = UDim2.new(1,0,0,10); f.Position = U
 local saveTitle = Instance.new("TextLabel")
 saveTitle.Size = UDim2.new(0.8, 0, 1, 0)
 saveTitle.BackgroundTransparency = 1
-saveTitle.Text = "  💾 儲存腳本"
 saveTitle.TextColor3 = Theme.Text
 saveTitle.Font = Theme.FontBold
 saveTitle.TextSize = Theme.SizeLarge
 saveTitle.TextXAlignment = Enum.TextXAlignment.Left
 saveTitle.ZIndex = 12
 saveTitle.Parent = saveTitleBar
+bindText(saveTitle, "titleSave")
 
 local saveCloseBtn = Instance.new("TextButton")
 saveCloseBtn.Size = UDim2.new(0, 35, 0, 35)
@@ -390,19 +581,18 @@ local fileNameLabel = Instance.new("TextLabel")
 fileNameLabel.Size = UDim2.new(1, -20, 0, 20)
 fileNameLabel.Position = UDim2.new(0, 10, 0, 55)
 fileNameLabel.BackgroundTransparency = 1
-fileNameLabel.Text = "輸入腳本名稱:"
 fileNameLabel.TextColor3 = Theme.TextDim
 fileNameLabel.Font = Theme.Font
 fileNameLabel.TextSize = Theme.SizeNormal
 fileNameLabel.TextXAlignment = Enum.TextXAlignment.Left
 fileNameLabel.ZIndex = 12
 fileNameLabel.Parent = saveFrame
+bindText(fileNameLabel, "lblFileName")
 
 local fileNameInput = Instance.new("TextBox")
 fileNameInput.Size = UDim2.new(1, -20, 0, 35)
 fileNameInput.Position = UDim2.new(0, 10, 0, 80)
 fileNameInput.BackgroundColor3 = Theme.SurfaceHighlight
-fileNameInput.PlaceholderText = "輸入腳本名稱..."
 fileNameInput.PlaceholderColor3 = Theme.TextDim
 fileNameInput.Text = ""
 fileNameInput.TextColor3 = Theme.Text
@@ -413,6 +603,7 @@ fileNameInput.ClearTextOnFocus = false
 fileNameInput.ZIndex = 12
 fileNameInput.Parent = saveFrame
 do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = fileNameInput end
+bindText(fileNameInput, "phFileName", "PlaceholderText")
 
 local saveBtnContainer = Instance.new("Frame")
 saveBtnContainer.Size = UDim2.new(1, -20, 0, 40)
@@ -424,7 +615,6 @@ do local l = Instance.new("UIListLayout"); l.FillDirection = Enum.FillDirection.
 
 local confirmSaveBtn = Instance.new("TextButton")
 confirmSaveBtn.Size = UDim2.new(0.5, -5, 1, 0)
-confirmSaveBtn.Text = "✅ 確認儲存"
 confirmSaveBtn.BackgroundColor3 = Theme.Success
 confirmSaveBtn.TextColor3 = Theme.TextDark
 confirmSaveBtn.Font = Theme.FontBold
@@ -434,10 +624,10 @@ confirmSaveBtn.LayoutOrder = 1
 confirmSaveBtn.ZIndex = 12
 confirmSaveBtn.Parent = saveBtnContainer
 do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = confirmSaveBtn end
+bindText(confirmSaveBtn, "btnConfirmSave")
 
 local cancelSaveBtn = Instance.new("TextButton")
 cancelSaveBtn.Size = UDim2.new(0.5, -5, 1, 0)
-cancelSaveBtn.Text = "❌ 取消"
 cancelSaveBtn.BackgroundColor3 = Theme.SurfaceHighlight
 cancelSaveBtn.TextColor3 = Theme.Text
 cancelSaveBtn.Font = Theme.FontBold
@@ -447,6 +637,7 @@ cancelSaveBtn.LayoutOrder = 2
 cancelSaveBtn.ZIndex = 12
 cancelSaveBtn.Parent = saveBtnContainer
 do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = cancelSaveBtn end
+bindText(cancelSaveBtn, "btnCancel")
 
 -- ============================================================
 -- 腳本管理面板
@@ -479,18 +670,17 @@ do local f = Instance.new("Frame"); f.Size = UDim2.new(1,0,0,10); f.Position = U
 local manageTitle = Instance.new("TextLabel")
 manageTitle.Size = UDim2.new(0.6, 0, 1, 0)
 manageTitle.BackgroundTransparency = 1
-manageTitle.Text = "  📁 腳本管理"
 manageTitle.TextColor3 = Theme.Text
 manageTitle.Font = Theme.FontBold
 manageTitle.TextSize = Theme.SizeLarge
 manageTitle.TextXAlignment = Enum.TextXAlignment.Left
 manageTitle.ZIndex = 12
 manageTitle.Parent = manageTitleBar
+bindText(manageTitle, "titleManage")
 
 local refreshScriptsBtn = Instance.new("TextButton")
 refreshScriptsBtn.Size = UDim2.new(0, 80, 0, 30)
 refreshScriptsBtn.Position = UDim2.new(1, -125, 0, 7)
-refreshScriptsBtn.Text = "🔄 刷新"
 refreshScriptsBtn.BackgroundColor3 = Theme.Accent
 refreshScriptsBtn.TextColor3 = Theme.Text
 refreshScriptsBtn.Font = Theme.Font
@@ -499,6 +689,7 @@ refreshScriptsBtn.BorderSizePixel = 0
 refreshScriptsBtn.ZIndex = 12
 refreshScriptsBtn.Parent = manageTitleBar
 do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,6); c.Parent = refreshScriptsBtn end
+bindText(refreshScriptsBtn, "btnRefresh")
 
 local manageCloseBtn = Instance.new("TextButton")
 manageCloseBtn.Size = UDim2.new(0, 35, 0, 35)
@@ -534,11 +725,10 @@ end)
 -- ============================================================
 -- 參數面板 Helper 函數
 -- ============================================================
-local function createLabel(text, parent, order)
+local function createLabel(key, parent, order)
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 0, 25)
 	label.BackgroundTransparency = 1
-	label.Text = text
 	label.TextColor3 = Theme.TextDim
 	label.Font = Theme.FontBold
 	label.TextSize = Theme.SizeNormal
@@ -546,9 +736,11 @@ local function createLabel(text, parent, order)
 	label.LayoutOrder = order
 	label.ZIndex = 13
 	label.Parent = parent
+	bindText(label, key)
+	return label
 end
 
-local function createToggle(text, parent, order, defaultValue, callback)
+local function createToggle(labelKey, parent, order, defaultValue, callback)
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.new(1, 0, 0, 40)
 	frame.BackgroundTransparency = 1
@@ -559,20 +751,21 @@ local function createToggle(text, parent, order, defaultValue, callback)
 	local lbl = Instance.new("TextLabel")
 	lbl.Size = UDim2.new(0.75, 0, 1, 0)
 	lbl.BackgroundTransparency = 1
-	lbl.Text = text
 	lbl.TextColor3 = Theme.Text
 	lbl.Font = Theme.Font
 	lbl.TextSize = Theme.SizeNormal
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.ZIndex = 13
 	lbl.Parent = frame
+	bindText(lbl, labelKey)
 
+	local isOn = defaultValue
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(0, 55, 0, 28)
 	btn.Position = UDim2.new(1, -60, 0.5, -14)
-	btn.BackgroundColor3 = defaultValue and Theme.Success or Theme.SurfaceHighlight
-	btn.Text = defaultValue and "開" or "關"
-	btn.TextColor3 = defaultValue and Theme.TextDark or Theme.TextDim
+	btn.BackgroundColor3 = isOn and Theme.Success or Theme.SurfaceHighlight
+	btn.Text = isOn and T("toggleOn") or T("toggleOff")
+	btn.TextColor3 = isOn and Theme.TextDark or Theme.TextDim
 	btn.Font = Theme.FontBold
 	btn.TextSize = Theme.SizeNormal
 	btn.BorderSizePixel = 0
@@ -580,11 +773,12 @@ local function createToggle(text, parent, order, defaultValue, callback)
 	btn.Parent = frame
 	do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = btn end
 
-	local isOn = defaultValue
+	table.insert(i18nToggleBtns, { btn = btn, getState = function() return isOn end })
+
 	btn.MouseButton1Click:Connect(function()
 		isOn = not isOn
 		btn.BackgroundColor3 = isOn and Theme.Success or Theme.SurfaceHighlight
-		btn.Text = isOn and "開" or "關"
+		btn.Text = isOn and T("toggleOn") or T("toggleOff")
 		btn.TextColor3 = isOn and Theme.TextDark or Theme.TextDim
 		if callback then callback(isOn) end
 	end)
@@ -595,16 +789,15 @@ end
 -- ============================================================
 -- 參數面板控件
 -- ============================================================
-createLabel("📜 介面設定", paramScrollFrame, 1)
-createToggle("自動捲軸", paramScrollFrame, 2, true, function(v) autoScrollEnabled = v end)
+createLabel("lblInterface", paramScrollFrame, 1)
+createToggle("lblAutoScroll", paramScrollFrame, 2, true, function(v) autoScrollEnabled = v end)
 
-createLabel("ℹ️ 遊戲資訊", paramScrollFrame, 3)
+createLabel("lblGameInfo", paramScrollFrame, 3)
 
-local infoLabel = Instance.new("TextLabel")
+infoLabel = Instance.new("TextLabel")
 infoLabel.Size = UDim2.new(1, 0, 0, 100)
 infoLabel.BackgroundColor3 = Theme.Surface
 infoLabel.BackgroundTransparency = 0.5
-infoLabel.Text = string.format("地圖: %s\n難易度: %s\n效果: %s", gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier)
 infoLabel.TextColor3 = Theme.Success
 infoLabel.Font = Theme.Font
 infoLabel.TextSize = 15
@@ -613,8 +806,9 @@ infoLabel.LayoutOrder = 10
 infoLabel.ZIndex = 13
 infoLabel.Parent = paramScrollFrame
 do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,6); c.Parent = infoLabel end
+updateInfoLabel()
 
-createLabel("🛠️ 追蹤器操作", paramScrollFrame, 11)
+createLabel("lblTrackerOp", paramScrollFrame, 11)
 
 local trackerBtnContainer = Instance.new("Frame")
 trackerBtnContainer.Size = UDim2.new(1, 0, 0, 40)
@@ -626,7 +820,6 @@ do local l = Instance.new("UIListLayout"); l.FillDirection = Enum.FillDirection.
 
 resetBtn = Instance.new("TextButton")
 resetBtn.Size = UDim2.new(0.5, -4, 1, 0)
-resetBtn.Text = "🔄 重置追蹤器"
 resetBtn.BackgroundColor3 = Theme.SurfaceHighlight
 resetBtn.TextColor3 = Theme.Warning
 resetBtn.Font = Theme.FontBold
@@ -636,10 +829,10 @@ resetBtn.LayoutOrder = 1
 resetBtn.ZIndex = 13
 resetBtn.Parent = trackerBtnContainer
 do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = resetBtn end
+bindText(resetBtn, "btnReset")
 
 debugBtn = Instance.new("TextButton")
 debugBtn.Size = UDim2.new(0.5, -4, 1, 0)
-debugBtn.Text = "🔍 塔追蹤清單"
 debugBtn.BackgroundColor3 = Theme.SurfaceHighlight
 debugBtn.TextColor3 = Theme.TextDim
 debugBtn.Font = Theme.FontBold
@@ -649,9 +842,10 @@ debugBtn.LayoutOrder = 2
 debugBtn.ZIndex = 13
 debugBtn.Parent = trackerBtnContainer
 do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = debugBtn end
+bindText(debugBtn, "btnDebug")
 
-createLabel("📝 腳本參數", paramScrollFrame, 13)
-createToggle("自動重播 (AutoReplay)", paramScrollFrame, 14, ScriptSettings.AutoReplay, function(v)
+createLabel("lblScriptParam", paramScrollFrame, 13)
+createToggle("lblAutoReplay", paramScrollFrame, 14, ScriptSettings.AutoReplay, function(v)
 	ScriptSettings.AutoReplay = v
 end)
 
@@ -692,7 +886,6 @@ makeDraggable(parameterFrame)
 makeDraggable(saveFrame)
 makeDraggable(manageFrame)
 
--- 標題欄拖移 mainFrame
 local tbDrag = { dragging = false }
 local tbConn = nil
 titleBar.InputBegan:Connect(function(input)
@@ -746,8 +939,8 @@ end
 local function openSavePanel()
 	closeAllPanels()
 	local defaultName = string.format("%s_%s_%s",
-		gameSettings.mapId or "地圖",
-		gameSettings.difficulty or "難易度",
+		gameSettings.mapId or "Map",
+		gameSettings.difficulty or "Diff",
 		os.date("%Y%m%d_%H%M%S"))
 	defaultName = defaultName:gsub("[^%w_%-]", "_")
 	fileNameInput.Text = defaultName
@@ -778,8 +971,8 @@ local function saveScriptToFile(fileName, content)
 	local ok, err = pcall(function()
 		if writefile then writefile(fullPath, content) else error("writefile 不可用") end
 	end)
-	if ok then addLog("✅ 已儲存: " .. fileName, Theme.Success); return true, fullPath
-	else  addLog("❌ 儲存失敗: " .. tostring(err), Theme.Error); return false, err end
+	if ok then addLog(T("logSaved"):format(fileName), Theme.Success); return true, fullPath
+	else  addLog(T("logSaveFailed"):format(tostring(err)), Theme.Error); return false, err end
 end
 
 function refreshScriptList()
@@ -791,7 +984,7 @@ function refreshScriptList()
 		local el = Instance.new("TextLabel")
 		el.Size = UDim2.new(1,-10,0,40)
 		el.BackgroundTransparency = 1
-		el.Text = "尚無已儲存的腳本"
+		el.Text = T("logNoScripts")
 		el.TextColor3 = Theme.TextDim
 		el.Font = Theme.Font
 		el.TextSize = Theme.SizeNormal
@@ -842,12 +1035,12 @@ function refreshScriptList()
 			local content = pcall(function() if readfile then return readfile(fp) end end)
 			if content then
 				pcall(function() setclipboard(content) end)
-				addLog("📋 已複製: " .. script.name, Theme.Accent)
+				addLog(T("logCopied"):format(script.name), Theme.Accent)
 			end
 		end)
 		dlBtn.MouseButton1Click:Connect(function()
 			pcall(function() if delfile then delfile(fp) end end)
-			addLog("🗑️ 已刪除: " .. script.name, Theme.Warning)
+			addLog(T("logDeleted"):format(script.name), Theme.Warning)
 			refreshScriptList()
 		end)
 	end
@@ -858,11 +1051,10 @@ end
 -- ============================================================
 local function generateScript()
 	if nextOrder <= 1 and #upgradeLog == 0 and #skipWaveLog == 0 then
-		addLog("⚠️ 沒有可生成的操作記錄", Theme.Warning)
+		addLog(T("logNoOps"), Theme.Warning)
 		return nil
 	end
 
-	-- 收集使用的塔
 	local usedTowers = {}
 	for order = 1, nextOrder - 1 do
 		local info = orderToInfo[order]
@@ -873,7 +1065,6 @@ local function generateScript()
 		end
 	end
 
-	-- 收集所有操作並排序（波次升序，同波次內倒數時間降序 = 越早越大）
 	local operations = {}
 	for order = 1, nextOrder - 1 do
 		local info = orderToInfo[order]
@@ -917,15 +1108,12 @@ local function generateScript()
 			abilityName = ab.abilityName,
 		})
 	end
-	-- 按遊戲開始後的 elapsed 秒數升序排列
 	table.sort(operations, function(a, b)
 		return a.elapsed < b.elapsed
 	end)
 
-	-- === 構建 fullScript 內容 ===
 	local fullLines = {}
 
-	-- header comment
 	table.insert(fullLines, "--[[")
 	table.insert(fullLines, "")
 	table.insert(fullLines, string.format("Map: %s  |  Difficulty: %s  |  Modifier: %s", gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier))
@@ -953,7 +1141,6 @@ local function generateScript()
 	table.insert(fullLines, "]]")
 	table.insert(fullLines, "")
 
-	-- load API
 	table.insert(fullLines, "-- Load NTD API")
 	table.insert(fullLines, "local NTD = getgenv().NTD")
 	table.insert(fullLines, "if not NTD then")
@@ -962,13 +1149,11 @@ local function generateScript()
 	table.insert(fullLines, "end")
 	table.insert(fullLines, "")
 
-	-- lobby section
 	table.insert(fullLines, "-- ========== LOBBY ==========")
 	table.insert(fullLines, "if NTD.IsLobby() then")
 	if ScriptSettings.AutoReplay then
 		table.insert(fullLines, "\tNTD.AutoReplay(true)")
 	end
-	-- EquipTower in lobby
 	if #usedTowers > 0 then
 		local towerList = {}
 		for _, name in ipairs(usedTowers) do
@@ -981,7 +1166,6 @@ local function generateScript()
 		end
 	end
 	if gameSettings.mapId and gameSettings.mapId ~= "Unknown" then
-		-- build modes from modifier (Randomiser, Rush, etc.), fallback to difficulty, then "Randomiser"
 		local modesArg
 		if gameSettings.modifier ~= "None" and gameSettings.modifier ~= "" then
 			local modeNames = {}
@@ -1004,7 +1188,6 @@ local function generateScript()
 	end
 	table.insert(fullLines, "")
 
-	-- in-game section
 	table.insert(fullLines, "-- ========== IN-GAME ==========")
 	table.insert(fullLines, "elseif NTD.IsInGame() then")
 	table.insert(fullLines, "")
@@ -1019,7 +1202,6 @@ local function generateScript()
 
 	table.insert(fullLines, "\t-- Operations (Elapsed seconds from game start)")
 
-	-- 輸出操作（按遊戲開始後的 elapsed 秒數排列）
 	for _, op in ipairs(operations) do
 		local rawE = op.elapsed or 0
 		local e
@@ -1087,7 +1269,6 @@ local function generateScript()
 
 	local fullScriptContent = table.concat(fullLines, "\n")
 
-	-- === outer wrapper ===
 	local script = {}
 	table.insert(script, "--[[")
 	table.insert(script, "")
@@ -1133,17 +1314,17 @@ copyBtn.MouseButton1Click:Connect(function()
 	if s then
 		local ok = pcall(setclipboard, s)
 		if ok then
-			addLog("✅ 腳本已複製到剪貼板！", Color3.fromRGB(100, 255, 100))
-			copyBtn.Text = "✅ 已複製"
+			addLog(T("logCopyOk"), Color3.fromRGB(100, 255, 100))
+			copyBtn.Text = T("btnCopied")
 			copyBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
 			print("\n========== 生成的排程腳本 ==========")
 			print(s)
 			print("=====================================\n")
 			task.wait(2)
-			copyBtn.Text = "📋 複製"
+			copyBtn.Text = T("btnCopy")
 			copyBtn.BackgroundColor3 = Theme.Success
 		else
-			addLog("⚠️ 腳本已輸出到控制台（F9查看）", Theme.Warning)
+			addLog(T("logCopyConsole"), Theme.Warning)
 			print(s)
 		end
 	end
@@ -1154,7 +1335,7 @@ saveBtn.MouseButton1Click:Connect(openSavePanel)
 confirmSaveBtn.MouseButton1Click:Connect(function()
 	local fileName = fileNameInput.Text:gsub("[^%w_%-]", "_")
 	if fileName == "" or fileName:match("^_+$") then
-		addLog("⚠️ 請輸入有效的腳本名稱", Theme.Warning)
+		addLog(T("logInvalidName"), Theme.Warning)
 		return
 	end
 	local s = generateScript()
@@ -1194,7 +1375,6 @@ resetBtn.MouseButton1Click:Connect(function()
 	gameStartTime = nil
 	gameEndElapsed = nil
 
-	-- 重新偵測地圖資訊
 	pcall(function()
 		local Values = ReplicatedStorage:WaitForChild("Values", 3)
 		if Values then
@@ -1203,7 +1383,6 @@ resetBtn.MouseButton1Click:Connect(function()
 		end
 	end)
 
-	-- 清空日誌
 	for _, child in pairs(scrollFrame:GetChildren()) do child:Destroy() end
 	listLayout:Destroy()
 	listLayout = Instance.new("UIListLayout")
@@ -1215,23 +1394,19 @@ resetBtn.MouseButton1Click:Connect(function()
 	end)
 	logOrder = 1
 
-	if infoLabel then
-		infoLabel.Text = string.format("地圖: %s\n難易度: %s\n效果: %s", gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier)
-	end
-
-	addLog("🔄 追蹤器已重置", Color3.fromRGB(100, 200, 255))
+	updateInfoLabel()
+	addLog(T("logReset"), Color3.fromRGB(100, 200, 255))
 end)
 
 debugBtn.MouseButton1Click:Connect(function()
-	addLog("=== 塔追蹤清單 ===", Color3.fromRGB(100, 200, 255))
+	addLog(T("logTowerListHdr"), Color3.fromRGB(100, 200, 255))
 	if nextOrder <= 1 then
-		addLog("  (無記錄)", Theme.TextDim)
+		addLog(T("logNoRecord"), Theme.TextDim)
 	else
 		for order = 1, nextOrder - 1 do
 			local info = orderToInfo[order]
 			if info then
-				addLog(string.format("  #%d %s [id=%s] +%.1fs",
-					info.order, info.UnitType, tostring(info.GameID), info.Elapsed or 0),
+				addLog(T("logTowerItem"):format(info.order, info.UnitType, tostring(info.GameID), info.Elapsed or 0),
 					Color3.fromRGB(200, 200, 200))
 			end
 		end
@@ -1270,13 +1445,12 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 	local method = getnamecallmethod()
 	local args = { ... }
 
-	-- ===  放置塔 (InvokeServer) ===
+	-- === 放置塔 (InvokeServer) ===
 	if method == "InvokeServer" and PlaceTowerRemote and self == PlaceTowerRemote then
-		local placeArgs = args[1]  -- { towerToPlace, towerID, instance, position }
+		local placeArgs = args[1]
 		local towerName = (type(placeArgs) == "table" and placeArgs.towerToPlace) or "Unknown"
 		local targetPos = (type(placeArgs) == "table" and placeArgs.position) or nil
 
-		-- 先執行原始呼叫取得伺服器回傳結果
 		local result = oldNamecall(self, ...)
 
 		task.spawn(function()
@@ -1298,15 +1472,14 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 				}
 				orderToInfo[nextOrder] = info
 				idToOrder[result.id]   = nextOrder
-				addLog(string.format("放置塔 #%d: %s  +%.1fs",
-					nextOrder, towerName, elapsed), Color3.fromRGB(100, 255, 100))
+				addLog(T("logPlaceTower"):format(nextOrder, towerName, elapsed), Color3.fromRGB(100, 255, 100))
 				if DEBUG_MODE then
 					print(string.format("[NTD Tracker] 放置 #%d %s id=%s +%.1fs",
 						nextOrder, towerName, tostring(result.id), elapsed))
 				end
 				nextOrder = nextOrder + 1
 			else
-				addLog(string.format("⚠️ 放置塔失敗: %s (伺服器拒絕)", towerName), Theme.Warning)
+				addLog(T("logPlaceFailed"):format(towerName), Theme.Warning)
 			end
 		end)
 
@@ -1315,7 +1488,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 
 	-- === 升級塔 (InvokeServer) ===
 	if method == "InvokeServer" and UpgradeTowerRemote and self == UpgradeTowerRemote then
-		-- args[1] = tostring(towerId)
 		local idStr   = args[1]
 		local towerId = tonumber(idStr)
 
@@ -1335,15 +1507,13 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 			})
 
 			if info then
-				addLog(string.format("升級塔 #%d: %s  +%.1fs",
-					info.order, info.UnitType, elapsed), Color3.fromRGB(255, 255, 100))
+				addLog(T("logUpgrade"):format(info.order, info.UnitType, elapsed), Color3.fromRGB(255, 255, 100))
 				if DEBUG_MODE then
 					print(string.format("[NTD Tracker] 升級 #%d %s id=%s +%.1fs",
 						info.order, info.UnitType, idStr, elapsed))
 				end
 			else
-				addLog(string.format("升級塔 [id:%s] (未追蹤)  +%.1fs",
-					idStr, elapsed), Color3.fromRGB(255, 200, 100))
+				addLog(T("logUpgradeUnknown"):format(idStr, elapsed), Color3.fromRGB(255, 200, 100))
 			end
 		end)
 
@@ -1371,15 +1541,13 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 			})
 
 			if info then
-				addLog(string.format("刪除塔 #%d: %s  +%.1fs",
-					info.order, info.UnitType, elapsed), Color3.fromRGB(255, 100, 100))
+				addLog(T("logSell"):format(info.order, info.UnitType, elapsed), Color3.fromRGB(255, 100, 100))
 				if DEBUG_MODE then
 					print(string.format("[NTD Tracker] 刪除 #%d %s id=%s +%.1fs",
 						info.order, info.UnitType, idStr, elapsed))
 				end
 			else
-				addLog(string.format("刪除塔 [id:%s] (未追蹤)  +%.1fs",
-					idStr, elapsed), Color3.fromRGB(255, 100, 100))
+				addLog(T("logSellUnknown"):format(idStr, elapsed), Color3.fromRGB(255, 100, 100))
 			end
 		end)
 
@@ -1388,7 +1556,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 
 	-- === Ready (FireServer) ===
 	if method == "FireServer" and ReadyRemote and self == ReadyRemote then
-		addLog("⏳ Ready 已送出，請選擇難易度...", Color3.fromRGB(255, 200, 100))
+		addLog(T("logReady"), Color3.fromRGB(255, 200, 100))
 		return oldNamecall(self, ...)
 	end
 
@@ -1396,7 +1564,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 	if method == "FireServer" and SkipWaveRemote and self == SkipWaveRemote then
 		local elapsed = getElapsed()
 		table.insert(skipWaveLog, { elapsed = elapsed })
-		addLog(string.format("跳過關卡  +%.1fs", elapsed), Color3.fromRGB(150, 150, 255))
+		addLog(T("logSkipWave"):format(elapsed), Color3.fromRGB(150, 150, 255))
 		return oldNamecall(self, ...)
 	end
 
@@ -1406,8 +1574,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 		local elapsed = getElapsed()
 		if speed ~= lastDetectedSpeed then
 			table.insert(speedChangeLog, { speed = speed, elapsed = elapsed })
-			addLog(string.format("速度設定: %dx  +%.1fs", speed, elapsed),
-				Color3.fromRGB(255, 200, 150))
+			addLog(T("logSpeedSet"):format(speed, elapsed), Color3.fromRGB(255, 200, 150))
 			lastDetectedSpeed = speed
 		end
 		return oldNamecall(self, ...)
@@ -1415,9 +1582,9 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 
 	-- === 塔能力 (InvokeServer) ===
 	if method == "InvokeServer" and TowerAbilityRemote and self == TowerAbilityRemote then
-		local idStr      = args[1]
+		local idStr       = args[1]
 		local abilityName = args[2] or "Unknown"
-		local towerId    = tonumber(idStr)
+		local towerId     = tonumber(idStr)
 
 		local result = oldNamecall(self, ...)
 
@@ -1434,15 +1601,13 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 			})
 
 			if info then
-				addLog(string.format("塔能力 #%d %s: %s  +%.1fs",
-					info.order, info.UnitType, abilityName, elapsed), Color3.fromRGB(180, 100, 255))
+				addLog(T("logAbility"):format(info.order, info.UnitType, abilityName, elapsed), Color3.fromRGB(180, 100, 255))
 				if DEBUG_MODE then
 					print(string.format("[NTD Tracker] 塔能力 #%d %s %s id=%s +%.1fs",
 						info.order, info.UnitType, abilityName, idStr, elapsed))
 				end
 			else
-				addLog(string.format("塔能力 [id:%s] %s (未追蹤)  +%.1fs",
-					idStr, abilityName, elapsed), Color3.fromRGB(180, 100, 255))
+				addLog(T("logAbilityUnknown"):format(idStr, abilityName, elapsed), Color3.fromRGB(180, 100, 255))
 			end
 		end)
 
@@ -1451,18 +1616,14 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 
 	-- === 難易度設定 (FireServer) ===
 	if method == "FireServer" and GamemodeRemote and self == GamemodeRemote then
-		local difficulty = args[1] or "未知"
+		local difficulty = args[1] or "Unknown"
 		gameSettings.difficulty = difficulty
 
-		-- 難易度選擇 → 作為計時基準點
 		gameStartTime  = tick()
 		isGameRunning  = true
 
-		addLog(string.format("難易度選擇: %s → 開始計時", difficulty), Color3.fromRGB(100, 255, 100))
-		if infoLabel then
-			infoLabel.Text = string.format("地圖: %s\n難易度: %s\n效果: %s",
-				gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier)
-		end
+		addLog(T("logDiffStart"):format(difficulty), Color3.fromRGB(100, 255, 100))
+		updateInfoLabel()
 		return oldNamecall(self, ...)
 	end
 
@@ -1491,26 +1652,20 @@ local function InitTracker()
 		ReadyRemote        = Events:WaitForChild("Ready",              10)
 		GameRunningValue   = Values:WaitForChild("GameRunning",        10)
 
-		-- 讀取地圖與難易度資訊
 		gameSettings.mapId = Values:FindFirstChild("Map") and Values.Map.Value or "Unknown"
 
-		-- 從 Values.Gamemode 讀取初始難易度，並監聽變化作為 Hook 的備用
 		local GamemodeValue = Values:FindFirstChild("Gamemode")
 		if GamemodeValue then
 			gameSettings.difficulty = GamemodeValue.Value
 			GamemodeValue.Changed:Connect(function(v)
 				if gameSettings.difficulty ~= v then
 					gameSettings.difficulty = v
-					addLog(string.format("難易度更新: %s", v), Color3.fromRGB(200, 150, 255))
-					if infoLabel then
-						infoLabel.Text = string.format("地圖: %s\n難易度: %s\n效果: %s",
-							gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier)
-					end
+					addLog(T("logDiffUpdate"):format(v), Color3.fromRGB(200, 150, 255))
+					updateInfoLabel()
 				end
 			end)
 		end
 
-		-- 讀取 Values.Modifiers 底下的效果（名稱即效果，可能有多個）
 		local ModifiersFolder = Values:FindFirstChild("Modifiers")
 		if ModifiersFolder then
 			local function updateModifier()
@@ -1524,47 +1679,31 @@ local function InitTracker()
 					end
 					gameSettings.modifier = table.concat(names, ", ")
 				end
-				if infoLabel then
-					infoLabel.Text = string.format("地圖: %s\n難易度: %s\n效果: %s",
-						gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier)
-				end
+				updateInfoLabel()
 			end
 			updateModifier()
 			ModifiersFolder.ChildAdded:Connect(function(child)
 				updateModifier()
-				addLog(string.format("效果套用: %s", child.Name), Color3.fromRGB(255, 180, 80))
+				addLog(T("logModAdd"):format(child.Name), Color3.fromRGB(255, 180, 80))
 			end)
 			ModifiersFolder.ChildRemoved:Connect(function(child)
 				updateModifier()
-				addLog(string.format("效果移除: %s，當前: %s", child.Name, gameSettings.modifier), Color3.fromRGB(180, 180, 180))
+				addLog(T("logModRemove"):format(child.Name, gameSettings.modifier), Color3.fromRGB(180, 180, 180))
 			end)
 		end
 	end)
 
 	if not ok then
 		warn("[NTD Tracker] 初始化失敗:", err)
-		addLog("❌ 追蹤系統初始化失敗（可能不在遊戲中）", Theme.Error)
+		addLog(T("logInitFailed"), Theme.Error)
 		return false
 	end
 
-	print("[NTD Tracker] ✅ 找到 PlaceTower RemoteFunction")
-	print("[NTD Tracker] ✅ 找到 UpgradeTower RemoteFunction")
-	print("[NTD Tracker] ✅ 找到 TowerAbility RemoteFunction")
-	print("[NTD Tracker] ✅ 找到 SkipWave RemoteEvent")
-	print("[NTD Tracker] ✅ 找到 InitChangeSpeed RemoteEvent")
-	print("[NTD Tracker] ✅ 找到 Ready RemoteEvent")
-	print("[NTD Tracker] ✅ 找到 GameRunning Value")
+	updateInfoLabel()
 
-	-- 更新資訊標籤
-	if infoLabel then
-		infoLabel.Text = string.format("地圖: %s\n難易度: %s\n效果: %s", gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier)
-	end
+	addLog(T("logWaitReady"), Color3.fromRGB(255, 200, 100))
+	addLog(T("logFlow"), Color3.fromRGB(180, 180, 255))
 
-	-- 計時由難易度 Hook 觸發，此處僅提示操作流程
-	addLog("⏳ 等待 Ready...", Color3.fromRGB(255, 200, 100))
-	addLog("📋 流程：Ready → 選擇難易度 → 自動開始計時", Color3.fromRGB(180, 180, 255))
-
-	-- 結算偵測（監聽 GameRunning 變回 false）
 	GameRunningValue.Changed:Connect(function(v)
 		if v == false and isGameRunning then
 			local endElapsed = getElapsed()
@@ -1573,18 +1712,15 @@ local function InitTracker()
 			gameStartTime = nil
 			local mins = math.floor(endElapsed / 60)
 			local secs = math.floor(endElapsed % 60)
-			addLog(string.format("🏁 遊戲結束  總時間: %dm %ds (%.1fs)", mins, secs, endElapsed), Color3.fromRGB(255, 255, 100))
+			addLog(T("logGameEnd"):format(mins, secs, endElapsed), Color3.fromRGB(255, 255, 100))
 		end
 	end)
 
-	addLog(string.format("🎉 追蹤系統已啟動！地圖: %s  難易度: %s  效果: %s",
-		gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier), Color3.fromRGB(100, 255, 100))
+	addLog(T("logStarted"):format(gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier), Color3.fromRGB(100, 255, 100))
 	print("[NTD Tracker] ✅ 初始化完成")
 	return true
 end
 
 -- ============================================================
-print("✅ 新手塔房 排程追蹤器已啟動！")
-print("📌 按 F8 顯示/隱藏界面")
 
 InitTracker()
