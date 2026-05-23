@@ -1272,6 +1272,12 @@ local function generateScript()
 	local script = {}
 	table.insert(script, "--[[")
 	table.insert(script, "")
+	table.insert(script, "Make Script By: Place Tracker")
+	table.insert(script, "loadstring(game:HttpGet('https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/Tool/%E6%94%BE%E7%BD%AE%E8%BF%BD%E8%B9%A4%E5%99%A8.lua'))()")
+	table.insert(script, "")
+	table.insert(script, 'How to use Place Tracker: USE "IN-Game not lobby" to make a Script')
+	table.insert(script, "!!!! Reload your script after key verification is successful !!!!")
+	table.insert(script, "")
 	table.insert(script, string.format("Map: %s  |  Difficulty: %s  |  Modifier: %s", gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier))
 	if gameEndElapsed then
 		local mins = math.floor(gameEndElapsed / 60)
