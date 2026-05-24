@@ -41,6 +41,7 @@ local L = {
 		sep_misc          = "雜項",
 		sep_standard      = "標準",
 		sep_retro         = "復古",
+    auto_turntable    = "每日轉盤獎勵",
 		auto_playtime     = "自動領取在線時間獎勵",
 		auto_level_reward = "自動領取等級獎勵",
 		auto_task_reward  = "自動領取任務獎勵",
@@ -72,6 +73,7 @@ local L = {
 		sep_misc          = "Misc",
 		sep_standard      = "Standard",
 		sep_retro         = "Retro",
+    auto_turntable    = "Auto Collect DailySpin Rewards",
 		auto_playtime     = "Auto Collect Playtime Rewards",
 		auto_level_reward = "Auto Collect Level Rewards",
 		auto_task_reward  = "Auto Collect Quest Rewards",
@@ -112,6 +114,7 @@ for _, v in ipairs(Gametable.GUI:GetChildren()) do
 	end
 end
 local Scripttable = {
+  turntable = false,
 	playtimeRewards = {
 		enable = false,
 		GUI = UI.Frames.Playtime
@@ -133,6 +136,19 @@ local Scripttable = {
   Skip_Enchanting = false
 }
 local Mainfunction = {}
+
+Mainfunction.turntable = function()
+  while Scripttable.turntable do
+    local Timer = workspace.Lobby.Chests.DailySpin.UI.Timer.Frame.Title.Text
+    if Timer == "READY!" then
+      game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("SpinDailyWheel"):InvokeServer()
+      return
+    end
+    task.wait(5)
+  end
+end
+
+
 Mainfunction.playtimeRewards = function()
 	local Rewards_UI = Scripttable.playtimeRewards.GUI.Container.Info.Container.Rewards
 	local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("ClaimPlaytimeReward")
@@ -167,15 +183,13 @@ Mainfunction.playtimeRewards = function()
 				print("已領取:", # result, "個獎勵")
 			end
 			if toCollect[# toCollect] == "12" then
+        print("無可領取獎勵")
+        Msg:Warning(T.msg_no_rewards)
 				return
 			end
-		else
-			print("無可領取獎勵")
-			Msg:Warning(T.msg_no_rewards)
-			return
 		end
 
-		task.wait(1)
+		task.wait(5)
 	end
 end
 
@@ -191,7 +205,7 @@ Mainfunction.Gamepass_Level_Reward = function()
 				local Premium_Claimed = Reward.Premium.Container.Item.Frame.Container.Claimed -- 付費已領取圖標
 				local tier = tonumber(Reward.Name)
 				if tier then
-					if not Premium_Locked.Visible and Premium_Clicker.Visible and not Premium_Claimed.Visible then
+					if Premium_Clicker.Visible and not Premium_Claimed.Visible then
 						ReplicatedStorage.Remotes.Functions.ClaimTier:InvokeServer(tier)
 						Premium_Clicker.Visible = false
 						Premium_Claimed.Visible = true
@@ -436,15 +450,26 @@ Tab_main:Separator({
 
 Tab_main:Radiobox({
 	Value = false,
+	Label = T.auto_turntable,
+	TextSize = radioTextSize,
+	Disabled = false,
+	Callback = function(self, Value)
+    Scripttable.turntable = Value
+		if Scripttable.turntable then
+      task.spawn(Mainfunction.turntable)
+    end
+	end,
+})
+
+Tab_main:Radiobox({
+	Value = false,
 	Label = T.auto_playtime,
 	TextSize = radioTextSize,
 	Disabled = false,
 	Callback = function(self, Value)
 		Scripttable.playtimeRewards.enable = Value
 		if Scripttable.playtimeRewards.enable then
-			task.spawn(function()
-				Mainfunction.playtimeRewards()
-			end)
+			task.spawn(Mainfunction.playtimeRewards)
 		end
 	end,
 })
@@ -461,9 +486,7 @@ Tab_main:Radiobox({
 	Callback = function(self, Value)
 		Scripttable.Gamepass.Level_Reward = Value
 		if Scripttable.Gamepass.Level_Reward then
-			task.spawn(function()
-				Mainfunction.Gamepass_Level_Reward()
-			end)
+			task.spawn(Mainfunction.Gamepass_Level_Reward)
 		end
 	end,
 })
@@ -476,9 +499,7 @@ Tab_main:Radiobox({
 	Callback = function(self, Value)
 		Scripttable.Gamepass.Task_Reward = Value
 		if Scripttable.Gamepass.Task_Reward then
-			task.spawn(function()
-        Mainfunction.Gamepass_Task_Reward()
-      end)
+			task.spawn(Mainfunction.Gamepass_Task_Reward)
 		end
 	end,
 })
@@ -493,9 +514,7 @@ DrawBox:Radiobox({
 	Callback = function(self, Value)
 		Scripttable.Gamepass.Draw_Box = Value
 		if Scripttable.Gamepass.Draw_Box then
-			task.spawn(function()
-				Mainfunction.Gamepass_DrawBox()
-			end)
+			task.spawn(Mainfunction.Gamepass_DrawBox)
 		end
 	end,
 })
