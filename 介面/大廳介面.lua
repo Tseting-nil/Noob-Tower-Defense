@@ -62,6 +62,7 @@ local L = {
 		msg_draw_done     = "完成，共抽了 %d 次，OP %d 次",
 		msg_cooldown      = "等待冷卻 %d 秒",
 		msg_block_popup   = "已封鎖最愛彈窗",
+		msg_turntable_done = "已領取每日轉盤獎勵",
 	},
 	en = {
 		title             = "Lobby Script",
@@ -94,6 +95,7 @@ local L = {
 		msg_draw_done     = "Done, total %d spins, OP %d",
 		msg_cooldown      = "Cooldown %d seconds",
 		msg_block_popup   = "Favourite popup blocked",
+		msg_turntable_done = "Daily Spin reward collected",
 	},
 }
 local T = L[currentLang]
@@ -132,16 +134,21 @@ local Scripttable = {
 		Retro_enable = false,
 		Standard_enable = false,
 	},
-	blockFavouritePrompt = false,
+	blockFavouritePrompt = true,
   Skip_Enchanting = false
 }
 local Mainfunction = {}
 
 Mainfunction.turntable = function()
+  local SpinWheel = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Events"):WaitForChild("SpinWheel")
   while Scripttable.turntable do
     local Timer = workspace.Lobby.Chests.DailySpin.UI.Timer.Frame.Title.Text
-    if Timer == "READY!" then
-      game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("SpinDailyWheel"):InvokeServer()
+    if Timer == "Ready!" then
+      local conns = getconnections(SpinWheel.OnClientEvent)
+      if conns[1] then
+        conns[1].Function()
+        print("[Turntable] " .. T.msg_turntable_done)
+      end
       return
     end
     task.wait(5)
@@ -213,7 +220,7 @@ Mainfunction.Gamepass_Level_Reward = function()
 						Basic_Claimed.Visible = true
             print("領取等級 ".. tier .. " 獎勵")
             if tier == 30 then
-              Msg:Warning(T.msg_pass_done)
+              Msg:Success(T.msg_pass_done)
               return
             end
 					elseif Basic_Clicker.Visible and not Basic_Claimed.Visible then
@@ -222,10 +229,15 @@ Mainfunction.Gamepass_Level_Reward = function()
 						Basic_Claimed.Visible = true
             print("領取等級 ".. tier .. " 普通獎勵")
             if tier == 30 then
-              Msg:Warning(T.msg_pass_done)
+              Msg:Success(T.msg_pass_done)
               return
             end
-					end
+					else
+            if tier == 30 then
+              Msg:Success(T.msg_pass_done)
+              return
+            end
+          end
 				end
 			end
 		end
@@ -294,7 +306,7 @@ _oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 					repeat task.wait(0.1); t += 0.1 until SkipBtn.Visible or t >= 10
 					if SkipBtn.Visible then
 						firesignal(SkipBtn.Button.Activated)
-						print("[Enchant] 跳過動畫")
+						-- print("[Enchant] 跳過動畫")
 					end
 				end)
 			end
@@ -556,7 +568,7 @@ Tab_main:Radiobox({
 })
 
 Tab_main:Radiobox({
-	Value = false,
+	Value = true,
 	Label = T.block_popup,
 	TextSize = radioTextSize,
 	Disabled = false,
@@ -601,7 +613,6 @@ Row_Retro:Button({
     Scripttable.Summon.ISCooldown = false
 	end,
 	DoubleClick = false,
-	BackgroundColor3 = Color3.fromRGB(100, 100, 200)
 })
 
 Row_Retro:Radiobox({
@@ -643,7 +654,6 @@ Row_Standard:Button({
     Scripttable.Summon.ISCooldown = false
 	end,
 	DoubleClick = false,
-	BackgroundColor3 = Color3.fromRGB(100, 100, 200)
 })
 
 Row_Standard:Radiobox({
