@@ -314,16 +314,16 @@ task.spawn(function()
       task.spawn(ReGameStateLabel)
       local elapsed = NTD_API.GetQueueElapsed()
       if elapsed then
-        QueueElapsed_Label.Text = L.queueElapsed .. string.format("%.1f s", elapsed)
+        QueueElapsed_Label.Text = L.queueElapsed .. string.format("%d s", elapsed)
       else
         QueueElapsed_Label.Text = L.queueElapsed .. L.queueNA
       end
       local remaining = NTD_API.GetQueueRemaining()
       if remaining then
         if remaining < 0 then
-          QueueRemaining_Label.Text = L.queueRemaining .. string.format("%.1f s", -remaining) .. L.queueOvertime
+          QueueRemaining_Label.Text = L.queueRemaining .. string.format("%d s", -remaining) .. L.queueOvertime
         else
-          QueueRemaining_Label.Text = L.queueRemaining .. string.format("%.1f s", remaining)
+          QueueRemaining_Label.Text = L.queueRemaining .. string.format("%d s", remaining)
         end
       else
         QueueRemaining_Label.Text = L.queueRemaining .. L.queueNA
