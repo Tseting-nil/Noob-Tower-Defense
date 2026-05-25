@@ -299,6 +299,25 @@ local function ReGameStateLabel()
   end
 end
 
+local function UpdateQueueLabels()
+  local elapsed = NTD_API.GetQueueElapsed()
+  if elapsed then
+    QueueElapsed_Label.Text = L.queueElapsed .. string.format("%d s", elapsed)
+  else
+    QueueElapsed_Label.Text = L.queueElapsed .. L.queueNA
+  end
+  local remaining = NTD_API.GetQueueRemaining()
+  if remaining then
+    if remaining < 0 then
+      QueueRemaining_Label.Text = L.queueRemaining .. string.format("%d s", -remaining) .. L.queueOvertime
+    else
+      QueueRemaining_Label.Text = L.queueRemaining .. string.format("%d s", remaining)
+    end
+  else
+    QueueRemaining_Label.Text = L.queueRemaining .. L.queueNA
+  end
+end
+
 task.spawn(function()
   while true do
     if getgenv().NTDAPI and getgenv().NTD then
@@ -312,29 +331,12 @@ task.spawn(function()
         AutoReplay_Label.Text = L.autoReplayOff
       end
       task.spawn(ReGameStateLabel)
-      local elapsed = NTD_API.GetQueueElapsed()
-      if elapsed then
-        QueueElapsed_Label.Text = L.queueElapsed .. string.format("%d s", elapsed)
-      else
-        QueueElapsed_Label.Text = L.queueElapsed .. L.queueNA
-      end
-      local remaining = NTD_API.GetQueueRemaining()
-      if remaining then
-        if remaining < 0 then
-          QueueRemaining_Label.Text = L.queueRemaining .. string.format("%d s", -remaining) .. L.queueOvertime
-        else
-          QueueRemaining_Label.Text = L.queueRemaining .. string.format("%d s", remaining)
-        end
-      else
-        QueueRemaining_Label.Text = L.queueRemaining .. L.queueNA
-      end
+      task.spawn(UpdateQueueLabels)
     else
       API_Check_Label.Text = L.envNotExist
       AutoReplay_Label.Text = L.noEnv
-      QueueElapsed_Label.Text = L.queueElapsed .. L.queueNA
-      QueueRemaining_Label.Text = L.queueRemaining .. L.queueNA
     end
-    task.wait(0.5)
+    task.wait(1)
   end
 end)
 
