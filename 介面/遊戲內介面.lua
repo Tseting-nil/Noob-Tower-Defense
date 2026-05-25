@@ -608,7 +608,21 @@ HeaderRow:Button({
 						local name = inputName:match("^%s*(.-)%s*$")
 						if name == "" then return end
 						local savePath = "Tsetingnil_script\\NTD\\Script\\" .. name .. ".lua"
-						local ok4, err = pcall(writefile, savePath, raw)
+						local outerBlock = raw:match("%-%-%[%[(.-)%]%]") or ""
+						local wrappedContent = "--[[\n" .. outerBlock .. "\n]]\n\n" ..
+							"-- ========== FULL SCRIPT ==========\n" ..
+							"local fullScript = [=[\n" ..
+							raw ..
+							"\n]=]\n\n" ..
+							"-- ========== Start ==========\n" ..
+							"local NTD = getgenv().NTD\n" ..
+							"if not NTD then\n" ..
+							"\tloadstring(game:HttpGet(\"https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/%E5%AF%86%E9%91%B0%E7%B3%BB%E7%B5%B1.lua\"))()\n" ..
+							"\tNTD = getgenv().NTD\n" ..
+							"end\n\n" ..
+							"NTD.SaveLocalScript(fullScript)\n" ..
+							"loadstring(fullScript)()\n"
+						local ok4, err = pcall(writefile, savePath, wrappedContent)
 						if ok4 then
 							Msg:Success(L.localscript_save_success .. ": " .. name)
 							NameModal:ClosePopup()
