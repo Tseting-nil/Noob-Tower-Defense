@@ -35,6 +35,7 @@ local L = {
 		title             = "大廳腳本",
 		tab_main          = "主頁",
 		tab_collect       = "收取",
+    tab_localscript   = "本地腳本管理",
 		author            = "作者: Tseting-nil",
 		sep_auto_collect  = "自動領取",
 		sep_battlepass    = "戰鬥通行證",
@@ -62,12 +63,33 @@ local L = {
 		msg_draw_done     = "完成，共抽了 %d 次，OP %d 次",
 		msg_cooldown      = "等待冷卻 %d 秒",
 		msg_block_popup   = "已封鎖最愛彈窗",
-		msg_turntable_done = "已領取每日轉盤獎勵",
+		msg_turntable_done    = "已領取每日轉盤獎勵",
+		localscript_path      = "路徑: ",
+		localscript_list      = "腳本列表",
+		localscript_refresh   = "重新整理",
+		localscript_run       = "執行",
+		localscript_no_scripts = "目錄中無腳本",
+		localscript_done           = "執行完成",
+		localscript_error          = "執行錯誤",
+		localscript_refreshed      = "清單已重新整理",
+		localscript_delete         = "刪除",
+		localscript_confirm_title  = "確認刪除?",
+		localscript_confirm_title2 = "⚠ 此操作無法復原",
+		localscript_confirm_yes    = "確認",
+		localscript_confirm_no     = "取消",
+		localscript_delete_final   = "永久刪除",
+		localscript_deleted        = "已刪除",
+		localscript_delete_error   = "刪除失敗",
+		localscript_info           = "i",
+		localscript_info_no_block  = "（無資訊區塊）",
+		localscript_info_read_fail = "讀取失敗",
+		localscript_info_close     = "關閉",
 	},
 	en = {
 		title             = "Lobby Script",
 		tab_main          = "Main",
 		tab_collect       = "Collect",
+    tab_localscript   = "Local Script Manager",
 		author            = "Author: Tseting-nil",
 		sep_auto_collect  = "Auto Collect",
 		sep_battlepass    = "Battle Pass",
@@ -95,7 +117,27 @@ local L = {
 		msg_draw_done     = "Done, total %d spins, OP %d",
 		msg_cooldown      = "Cooldown %d seconds",
 		msg_block_popup   = "Favourite popup blocked",
-		msg_turntable_done = "Daily Spin reward collected",
+		msg_turntable_done    = "Daily Spin reward collected",
+		localscript_path      = "Path: ",
+		localscript_list      = "Script List",
+		localscript_refresh   = "Refresh",
+		localscript_run       = "Run",
+		localscript_no_scripts = "No scripts in directory",
+		localscript_done           = "Executed",
+		localscript_error          = "Error",
+		localscript_refreshed      = "List refreshed",
+		localscript_delete         = "Delete",
+		localscript_confirm_title  = "Confirm Delete?",
+		localscript_confirm_title2 = "⚠ This cannot be undone",
+		localscript_confirm_yes    = "Confirm",
+		localscript_confirm_no     = "Cancel",
+		localscript_delete_final   = "Delete Forever",
+		localscript_deleted        = "Deleted",
+		localscript_delete_error   = "Delete failed",
+		localscript_info           = "i",
+		localscript_info_no_block  = "(No info block)",
+		localscript_info_read_fail = "Read failed",
+		localscript_info_close     = "Close",
 	},
 }
 local T = L[currentLang]
@@ -135,7 +177,11 @@ local Scripttable = {
 		Standard_enable = false,
 	},
 	blockFavouritePrompt = true,
-  Skip_Enchanting = false
+  Skip_Enchanting = false,
+  Localscript = {
+    path = [[Tsetingnil_script\NTD\Script]],
+    ScriptListTable = nil,
+  }
 }
 local Mainfunction = {}
 
@@ -415,7 +461,8 @@ local Tabs = {}
 
 for _, Name in ipairs({
 	T.tab_main,
-	T.tab_collect
+	T.tab_collect,
+  T.tab_localscript
 }) do
 	local Tab = TabsWindow:CreateTab({
 		Name = Name
@@ -448,6 +495,11 @@ local Tab_main = Tabs[1]:ScrollingCanvas({
 })
 
 local Tab_Summon = Tabs[2]:ScrollingCanvas({
+	Fill = true,
+	UiPadding = UDim.new(0, 0)
+})
+
+local Tab_Localscript = Tabs[3]:ScrollingCanvas({
 	Fill = true,
 	UiPadding = UDim.new(0, 0)
 })
@@ -675,3 +727,204 @@ Row_Standard:Radiobox({
 		end
 	end,
 })
+
+-- ========================================================================== --
+-- Tab_Localscript
+
+Mainfunction.BuildScriptList = function()
+	Scripttable.Localscript.ScriptListTable:ClearRows()
+	local path = Scripttable.Localscript.path
+	local ok, files = pcall(listfiles, path)
+	local scripts = {}
+	if ok and files then
+		for _, filePath in ipairs(files) do
+			local name = filePath:match("([^/\\]+)$") or filePath
+			if name:match("%.lua$") then
+				scripts[#scripts + 1] = { name = name, path = filePath }
+			end
+		end
+	end
+	if #scripts == 0 then
+		local EmptyRow = Scripttable.Localscript.ScriptListTable:NextRow()
+		EmptyRow:Column():Label({ Text = T.localscript_no_scripts })
+		return
+	end
+	for _, script in ipairs(scripts) do
+		local Row = Scripttable.Localscript.ScriptListTable:NextRow()
+
+		-- 名稱欄：無 UIFlexItem → 佔剩餘空間
+		local NameCol = Row:Column()
+		NameCol:Label({ Text = script.name })
+
+		-- 操作欄：固定 150px（資訊 + 運行 + 刪除並排）
+		local ActionsCol = Row:Column()
+		local actionsFrame = ActionsCol.RawObject
+		local actionsFlex = Instance.new("UIFlexItem", actionsFrame)
+		actionsFlex.FlexMode = Enum.UIFlexMode.None
+		actionsFrame.Size = UDim2.new(0, 150, 1, 0)
+
+		local ActionRow = ActionsCol:Row({ Expanded = true })
+
+		ActionRow:SmallButton({
+			Text = T.localscript_info,
+			Callback = function()
+				local content
+				local ok3, raw = pcall(readfile, script.path)
+				if ok3 and raw then
+					local block = raw:match("%-%-%[%[(.-)%]%]")
+					if block then
+						local map, diff, mod, timeStr
+						local towers = {}
+						local inTowers = false
+						for line in (block .. "\n"):gmatch("([^\n]*)\n") do
+							line = line:gsub("\r", "")
+							local m, d, mo = line:match(
+								"Map:%s*(.-)%s*|%s*Difficulty:%s*(.-)%s*|%s*Modifier:%s*(.-)%s*$"
+							)
+							if m then
+								map, diff, mod = m, d, mo
+							elseif line:find("^%s*Time:") then
+								-- 只取括號前的部分，例如 "4m 20s"
+								timeStr = line:match("Time:%s*(.-)%s*%(") or line:match("Time:%s*(.-)%s*$")
+								if timeStr then timeStr = timeStr:match("^%s*(.-)%s*$") end
+							elseif line:find("Towers used:") then
+								inTowers = true
+							elseif inTowers and line:find("%-%s+%S") then
+								local tower = line:match("%-%s+(.-)%s*$")
+								if tower and tower ~= "" then
+									towers[#towers + 1] = tower
+								end
+							end
+						end
+						local out = {}
+						if map and diff then
+							local row1 = "Map: " .. map .. " | Difficulty: " .. diff
+							if timeStr then row1 = row1 .. " | Time: " .. timeStr end
+							out[#out + 1] = row1
+						end
+						if mod and mod ~= "" then
+							out[#out + 1] = "<font color='#FFB347'>Modifier:</font>"
+							for part in (mod .. ","):gmatch("([^,]+),") do
+								local trimmed = part:match("^%s*(.-)%s*$")
+								if trimmed ~= "" then
+									out[#out + 1] = "  " .. trimmed
+								end
+							end
+						end
+						if #towers > 0 then
+							out[#out + 1] = "<font color='#5BC8F5'>Towers used:</font>"
+							for _, t in ipairs(towers) do
+								out[#out + 1] = "  - " .. t
+							end
+						end
+						content = #out > 0 and table.concat(out, "\n") or T.localscript_info_no_block
+					else
+						content = T.localscript_info_no_block
+					end
+				else
+					content = T.localscript_info_read_fail
+				end
+				local InfoModal = TabsWindow:PopupModal({ Title = script.name })
+				InfoModal:Console({
+					Value    = content,
+					ReadOnly = true,
+					RichText = true,
+					Border   = true,
+					Size     = UDim2.new(1, 0, 0, 150),
+				})
+				InfoModal:Button({
+					Text     = T.localscript_info_close,
+					Callback = function() InfoModal:ClosePopup() end,
+				})
+			end,
+		})
+
+		ActionRow:Button({
+			Text = T.localscript_run,
+			Callback = function()
+				task.spawn(function()
+					local ok2, err = pcall(function()
+						loadstring(readfile(script.path))()
+					end)
+					if not ok2 then
+						Msg:Warning(T.localscript_error .. ": " .. tostring(err))
+					else
+						Msg:Success(T.localscript_done .. ": " .. script.name)
+					end
+				end)
+			end,
+		})
+
+		ActionRow:Button({
+			Text = T.localscript_delete,
+			Callback = function(delBtn)
+				-- 第一次確認
+				local Popup1 = Tab_Localscript:PopupModal({
+					RelativeTo = delBtn,
+				})
+				Popup1:Separator({ Text = T.localscript_confirm_title })
+				Popup1:Label({ Text = script.name, TextWrapped = true })
+				local Row1 = Popup1:Row({ Expanded = true })
+				Row1:Button({
+					Text = T.localscript_confirm_yes,
+					Callback = function()
+						Popup1:ClosePopup()
+						-- 第二次確認
+						local Popup2 = Tab_Localscript:PopupModal({
+							RelativeTo = delBtn,
+						})
+						Popup2:Separator({ Text = T.localscript_confirm_title2 })
+						local Row2 = Popup2:Row({ Expanded = true })
+						Row2:Button({
+							Text = T.localscript_delete_final,
+							Callback = function()
+								Popup2:ClosePopup()
+								local ok2, err = pcall(delfile, script.path)
+								if ok2 then
+									Msg:Success(T.localscript_deleted .. ": " .. script.name)
+									Mainfunction.BuildScriptList()
+								else
+									Msg:Warning(T.localscript_delete_error .. ": " .. tostring(err))
+								end
+							end,
+						})
+						Row2:Button({
+							Text = T.localscript_confirm_no,
+							Callback = function()
+								Popup2:ClosePopup()
+							end,
+						})
+					end,
+				})
+				Row1:Button({
+					Text = T.localscript_confirm_no,
+					Callback = function()
+						Popup1:ClosePopup()
+					end,
+				})
+			end,
+		})
+	end
+end
+
+Tab_Localscript:Label({
+	Text = T.localscript_path .. Scripttable.Localscript.path,
+	TextSize = radioTextSize,
+})
+
+Tab_Localscript:Separator({ Text = T.localscript_list })
+
+Tab_Localscript:Button({
+	Text = T.localscript_refresh,
+	Callback = function()
+		Mainfunction.BuildScriptList()
+		Msg:Success(T.localscript_refreshed)
+	end,
+})
+
+Scripttable.Localscript.ScriptListTable = Tab_Localscript:Table({
+	RowBackground = true,
+	Border = true,
+})
+
+Mainfunction.BuildScriptList()
