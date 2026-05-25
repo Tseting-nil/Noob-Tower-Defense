@@ -29,6 +29,8 @@ end
 local i18n = {
 	zh = {
 		windowTitle    = "遊戲內介面",
+    tab_main       = "Main",
+    tab_localscript = "本地腳本",
 		sectionStatus  = "當前狀態",
 		envChecking    = "環境檢查中...",
 		gameState      = "遊戲當前狀態",
@@ -48,9 +50,35 @@ local i18n = {
 		envNotExist    = "環境檢查：本地環境不存在",
 		autoReplayOn   = "自動重新戰鬥：已開啟",
 		autoReplayOff  = "自動重新戰鬥：未開啟",
+		queueElapsed   = "佇列進度：",
+		queueRemaining = "佇列剩餘：",
+		queueNA        = "---",
+		queueOvertime  = "（超時）",
+		localscript_path           = "路徑: ",
+		localscript_list           = "腳本列表",
+		localscript_refresh        = "重新整理",
+		localscript_run            = "執行",
+		localscript_no_scripts     = "目錄中無腳本",
+		localscript_done           = "執行完成",
+		localscript_error          = "執行錯誤",
+		localscript_refreshed      = "清單已重新整理",
+		localscript_delete         = "刪除",
+		localscript_confirm_title  = "確認刪除?",
+		localscript_confirm_title2 = "⚠ 此操作無法復原",
+		localscript_confirm_yes    = "確認",
+		localscript_confirm_no     = "取消",
+		localscript_delete_final   = "永久刪除",
+		localscript_deleted        = "已刪除",
+		localscript_delete_error   = "刪除失敗",
+		localscript_info           = "i",
+		localscript_info_no_block  = "（無資訊區塊）",
+		localscript_info_read_fail = "讀取失敗",
+		localscript_info_close     = "關閉",
 	},
 	en = {
 		windowTitle    = "In-Game UI",
+    tab_main       = "Main",
+    tab_localscript = "Local Script",
 		sectionStatus  = "Current Status",
 		envChecking    = "Checking environment...",
 		gameState      = "Game State",
@@ -70,6 +98,30 @@ local i18n = {
 		envNotExist    = "Environment: Local env missing",
 		autoReplayOn   = "Auto Replay: Enabled",
 		autoReplayOff  = "Auto Replay: Disabled",
+		queueElapsed   = "Queue Elapsed: ",
+		queueRemaining = "Queue Remaining: ",
+		queueNA        = "---",
+		queueOvertime  = " (overtime)",
+		localscript_path           = "Path: ",
+		localscript_list           = "Script List",
+		localscript_refresh        = "Refresh",
+		localscript_run            = "Run",
+		localscript_no_scripts     = "No scripts in directory",
+		localscript_done           = "Executed",
+		localscript_error          = "Error",
+		localscript_refreshed      = "List refreshed",
+		localscript_delete         = "Delete",
+		localscript_confirm_title  = "Confirm Delete?",
+		localscript_confirm_title2 = "⚠ This cannot be undone",
+		localscript_confirm_yes    = "Confirm",
+		localscript_confirm_no     = "Cancel",
+		localscript_delete_final   = "Delete Forever",
+		localscript_deleted        = "Deleted",
+		localscript_delete_error   = "Delete failed",
+		localscript_info           = "i",
+		localscript_info_no_block  = "(No info block)",
+		localscript_info_read_fail = "Read failed",
+		localscript_info_close     = "Close",
 	},
 }
 
@@ -81,20 +133,51 @@ local NTD_API = nil
 local Scripttable = nil
 local Mainfunction = nil
 
+-- ========================================================================== --
+-- GUI
+
 local ReGui = loadstring(game:HttpGet("https://gist.githubusercontent.com/Tseting-nil/169b7303e1418cb301bad5ab427e9351/raw/93e90190f628387b545eef62b49e4ce146d1dad8/GUI:ReGui"))()
 
-local windowSize = currentLang == "en" and UDim2.new(0, 280, 0, 150) or UDim2.new(0, 250, 0, 180)
+local windowSize = currentLang == "en" and UDim2.new(0, 300, 0, 220) or UDim2.new(0, 250, 0, 220)
 
-local Window = ReGui:Window({
+local TabsWindow =  ReGui:TabsWindow({
 	Title = L.windowTitle,
 	Size = windowSize,
 	NoScroll = true,
-	Theme = "DarkTheme",
-	Visible = true,
   NoResize = true,
 })
 
-local Tab_main = Window:ScrollingCanvas({
+local Tabs = {}
+
+for _, Name in ipairs({
+	L.tab_main,
+  L.tab_localscript
+}) do
+	local Tab = TabsWindow:CreateTab({
+		Name = Name
+	})
+	table.insert(Tabs, Tab)
+end
+
+-- 修改 Tab 字體和大小
+task.spawn(function()
+	task.wait(0.1)
+	for _, tab in ipairs(Tabs) do
+		local tabButton = tab.TabButton.Button
+		local label = tabButton:FindFirstChildWhichIsA("TextLabel")
+		if label then
+			label.TextSize = currentLang == "en" and 14 or 18
+			label.Font = Enum.Font.Ubuntu
+		end
+	end
+end)
+
+local Tab_main = Tabs[1]:ScrollingCanvas({
+	Fill = true,
+	UiPadding = UDim.new(0, 0)
+})
+
+local Tab_Localscript = Tabs[2]:ScrollingCanvas({
 	Fill = true,
 	UiPadding = UDim.new(0, 0)
 })
@@ -119,6 +202,20 @@ local GameState_Label = Tab_main:Label({
 
 local AutoReplay_Label = Tab_main:Label({
 	Text = L.autoReplay,
+	TextSize = fontSize or 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+local QueueElapsed_Label = Tab_main:Label({
+	Text = L.queueElapsed .. L.queueNA,
+	TextSize = fontSize or 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+local QueueRemaining_Label = Tab_main:Label({
+	Text = L.queueRemaining .. L.queueNA,
 	TextSize = fontSize or 16,
 	NoTheme = true,
 	TextColor3 = Color3.fromRGB(240, 240, 240),
@@ -202,21 +299,232 @@ local function ReGameStateLabel()
   end
 end
 
-while true do
-  if getgenv().NTDAPI and getgenv().NTD then
-    NTD_API = getgenv().NTD
-    Scripttable = getgenv().NTD.Scripttable
-    Mainfunction = getgenv().NTD.Mainfunction
-    API_Check_Label.Text = L.envExist
-    if Scripttable.AutoReplay then
-      AutoReplay_Label.Text = L.autoReplayOn
+task.spawn(function()
+  while true do
+    if getgenv().NTDAPI and getgenv().NTD then
+      NTD_API = getgenv().NTD
+      Scripttable = getgenv().NTD.Scripttable
+      Mainfunction = getgenv().NTD.Mainfunction
+      API_Check_Label.Text = L.envExist
+      if Scripttable.AutoReplay then
+        AutoReplay_Label.Text = L.autoReplayOn
+      else
+        AutoReplay_Label.Text = L.autoReplayOff
+      end
+      task.spawn(ReGameStateLabel)
+      local elapsed = NTD_API.GetQueueElapsed()
+      if elapsed then
+        QueueElapsed_Label.Text = L.queueElapsed .. string.format("%.1f s", elapsed)
+      else
+        QueueElapsed_Label.Text = L.queueElapsed .. L.queueNA
+      end
+      local remaining = NTD_API.GetQueueRemaining()
+      if remaining then
+        if remaining < 0 then
+          QueueRemaining_Label.Text = L.queueRemaining .. string.format("%.1f s", -remaining) .. L.queueOvertime
+        else
+          QueueRemaining_Label.Text = L.queueRemaining .. string.format("%.1f s", remaining)
+        end
+      else
+        QueueRemaining_Label.Text = L.queueRemaining .. L.queueNA
+      end
     else
-      AutoReplay_Label.Text = L.autoReplayOff
+      API_Check_Label.Text = L.envNotExist
+      AutoReplay_Label.Text = L.noEnv
+      QueueElapsed_Label.Text = L.queueElapsed .. L.queueNA
+      QueueRemaining_Label.Text = L.queueRemaining .. L.queueNA
     end
-    task.spawn(ReGameStateLabel)
-  else
-    API_Check_Label.Text = L.envNotExist
-    AutoReplay_Label.Text = L.noEnv
+    task.wait(0.5)
   end
-  task.wait(0.5)
+end)
+
+-- ========================================================================== --
+-- Tab_Localscript
+local Localscript = {
+  path = [[Tsetingnil_script\NTD\Script]],
+  ScriptListTable = nil,
+}
+
+
+local BuildScriptList
+BuildScriptList = function()
+	Localscript.ScriptListTable:ClearRows()
+	local path = Localscript.path
+	local ok, files = pcall(listfiles, path)
+	local scripts = {}
+	if ok and files then
+		for _, filePath in ipairs(files) do
+			local name = filePath:match("([^/\\]+)$") or filePath
+			if name:match("%.lua$") then
+				scripts[#scripts + 1] = { name = name, path = filePath }
+			end
+		end
+	end
+	if #scripts == 0 then
+		local EmptyRow = Localscript.ScriptListTable:NextRow()
+		EmptyRow:Column():Label({ Text = L.localscript_no_scripts })
+		return
+	end
+	for _, script in ipairs(scripts) do
+		local Row = Localscript.ScriptListTable:NextRow()
+
+		-- 名稱欄：無 UIFlexItem → 佔剩餘空間
+		local NameCol = Row:Column()
+		NameCol:Label({ Text = script.name })
+
+		-- 操作欄：固定 150px（資訊 + 運行 + 刪除並排）
+		local ActionsCol = Row:Column()
+		local actionsFrame = ActionsCol.RawObject
+		local actionsFlex = Instance.new("UIFlexItem", actionsFrame)
+		actionsFlex.FlexMode = Enum.UIFlexMode.None
+		actionsFrame.Size = UDim2.new(0, 80, 1, 0)
+
+		local ActionRow = ActionsCol:Row({ Expanded = true })
+
+		ActionRow:SmallButton({
+			Text = L.localscript_info,
+			Callback = function()
+				local content
+				local ok3, raw = pcall(readfile, script.path)
+				if ok3 and raw then
+					local block = raw:match("%-%-%[%[(.-)%]%]")
+					if block then
+						local map, diff, mod, timeStr
+						local towers = {}
+						local inTowers = false
+						for line in (block .. "\n"):gmatch("([^\n]*)\n") do
+							line = line:gsub("\r", "")
+							local m, d, mo = line:match(
+								"Map:%s*(.-)%s*|%s*Difficulty:%s*(.-)%s*|%s*Modifier:%s*(.-)%s*$"
+							)
+							if m then
+								map, diff, mod = m, d, mo
+							elseif line:find("^%s*Time:") then
+								-- 只取括號前的部分，例如 "4m 20s"
+								timeStr = line:match("Time:%s*(.-)%s*%(") or line:match("Time:%s*(.-)%s*$")
+								if timeStr then timeStr = timeStr:match("^%s*(.-)%s*$") end
+							elseif line:find("Towers used:") then
+								inTowers = true
+							elseif inTowers and line:find("%-%s+%S") then
+								local tower = line:match("%-%s+(.-)%s*$")
+								if tower and tower ~= "" then
+									towers[#towers + 1] = tower
+								end
+							end
+						end
+						local out = {}
+						if map and diff then
+							local row1 = "Map: " .. map .. " | Difficulty: " .. diff
+							if timeStr then row1 = row1 .. " | Time: " .. timeStr end
+							out[#out + 1] = row1
+						end
+						if mod and mod ~= "" then
+							out[#out + 1] = "<font color='#FFB347'>Modifier:</font>"
+							for part in (mod .. ","):gmatch("([^,]+),") do
+								local trimmed = part:match("^%s*(.-)%s*$")
+								if trimmed ~= "" then
+									out[#out + 1] = "  " .. trimmed
+								end
+							end
+						end
+						if #towers > 0 then
+							out[#out + 1] = "<font color='#5BC8F5'>Towers used:</font>"
+							for _, t in ipairs(towers) do
+								out[#out + 1] = "  - " .. t
+							end
+						end
+						content = #out > 0 and table.concat(out, "\n") or L.localscript_info_no_block
+					else
+						content = L.localscript_info_no_block
+					end
+				else
+					content = L.localscript_info_read_fail
+				end
+				local InfoModal = TabsWindow:PopupModal({ Title = script.name })
+				InfoModal:Console({
+					Value    = content,
+					ReadOnly = true,
+					RichText = true,
+					Border   = true,
+					Size     = UDim2.new(1, 0, 0, 150),
+				})
+				InfoModal:Button({
+					Text     = L.localscript_info_close,
+					Callback = function() InfoModal:ClosePopup() end,
+				})
+			end,
+		})
+
+		ActionRow:SmallButton({
+			Text = L.localscript_delete,
+			Callback = function(delBtn)
+				-- 第一次確認
+				local Popup1 = Tab_Localscript:PopupModal({
+					RelativeTo = delBtn,
+				})
+				Popup1:Separator({ Text = L.localscript_confirm_title })
+				Popup1:Label({ Text = script.name, TextWrapped = true })
+				local Row1 = Popup1:Row({ Expanded = true })
+				Row1:Button({
+					Text = L.localscript_confirm_yes,
+					Callback = function()
+						Popup1:ClosePopup()
+						-- 第二次確認
+						local Popup2 = Tab_Localscript:PopupModal({
+							RelativeTo = delBtn,
+						})
+						Popup2:Separator({ Text = L.localscript_confirm_title2 })
+						local Row2 = Popup2:Row({ Expanded = true })
+						Row2:Button({
+							Text = L.localscript_delete_final,
+							Callback = function()
+								Popup2:ClosePopup()
+								local ok2, err = pcall(delfile, script.path)
+								if ok2 then
+									Msg:Success(L.localscript_deleted .. ": " .. script.name)
+									BuildScriptList()
+								else
+									Msg:Warning(L.localscript_delete_error .. ": " .. tostring(err))
+								end
+							end,
+						})
+						Row2:Button({
+							Text = L.localscript_confirm_no,
+							Callback = function()
+								Popup2:ClosePopup()
+							end,
+						})
+					end,
+				})
+				Row1:Button({
+					Text = L.localscript_confirm_no,
+					Callback = function()
+						Popup1:ClosePopup()
+					end,
+				})
+			end,
+		})
+	end
 end
+
+Tab_Localscript:Label({
+	Text = L.localscript_path .. Localscript.path,
+	TextSize = fontSize,
+})
+
+Tab_Localscript:Separator({ Text = L.localscript_list })
+
+Tab_Localscript:Button({
+	Text = L.localscript_refresh,
+	Callback = function()
+		BuildScriptList()
+		Msg:Success(L.localscript_refreshed)
+	end,
+})
+
+Localscript.ScriptListTable = Tab_Localscript:Table({
+	RowBackground = true,
+	Border = true,
+})
+
+BuildScriptList()
