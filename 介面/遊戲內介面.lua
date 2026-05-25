@@ -73,6 +73,13 @@ local i18n = {
 		localscript_info_no_block  = "（無資訊區塊）",
 		localscript_info_read_fail = "讀取失敗",
 		localscript_info_close     = "關閉",
+		localscript_save_running    = "儲存正在運行的腳本",
+		localscript_save            = "儲存",
+		localscript_save_name_title = "輸入儲存名稱",
+		localscript_save_name_ph    = "腳本名稱...",
+		localscript_save_success    = "已儲存",
+		localscript_save_error      = "儲存失敗",
+		localscript_save_no_running = "無正在運行的腳本",
 	},
 	en = {
 		windowTitle    = "In-Game UI",
@@ -120,6 +127,13 @@ local i18n = {
 		localscript_info_no_block  = "(No info block)",
 		localscript_info_read_fail = "Read failed",
 		localscript_info_close     = "Close",
+		localscript_save_running    = "Save Running Script",
+		localscript_save            = "Save",
+		localscript_save_name_title = "Enter Save Name",
+		localscript_save_name_ph    = "Script name...",
+		localscript_save_success    = "Saved",
+		localscript_save_error      = "Save failed",
+		localscript_save_no_running = "No running script",
 	},
 }
 
@@ -501,11 +515,122 @@ Tab_Localscript:Label({
 
 Tab_Localscript:Separator({ Text = L.localscript_list })
 
-Tab_Localscript:Button({
+local HeaderRow = Tab_Localscript:Row()
+
+HeaderRow:Button({
 	Text = L.localscript_refresh,
 	Callback = function()
 		BuildScriptList()
 		Msg:Success(L.localscript_refreshed)
+	end,
+})
+
+HeaderRow:Button({
+	Text = L.localscript_save_running,
+	Callback = function()
+		local userId = tostring(game.Players.LocalPlayer.UserId)
+		local mainPath = "Tsetingnil_script\\NTD\\main_" .. userId .. ".lua"
+		local ok3, raw = pcall(readfile, mainPath)
+		if not ok3 or not raw or raw == "" then
+			Msg:Warning(L.localscript_save_no_running)
+			return
+		end
+		local content
+		local block = raw:match("%-%-%[%[(.-)%]%]")
+		if block then
+			local map, diff, mod, timeStr
+			local towers = {}
+			local inTowers = false
+			for line in (block .. "\n"):gmatch("([^\n]*)\n") do
+				line = line:gsub("\r", "")
+				local m, d, mo = line:match(
+					"Map:%s*(.-)%s*|%s*Difficulty:%s*(.-)%s*|%s*Modifier:%s*(.-)%s*$"
+				)
+				if m then
+					map, diff, mod = m, d, mo
+				elseif line:find("^%s*Time:") then
+					timeStr = line:match("Time:%s*(.-)%s*%(") or line:match("Time:%s*(.-)%s*$")
+					if timeStr then timeStr = timeStr:match("^%s*(.-)%s*$") end
+				elseif line:find("Towers used:") then
+					inTowers = true
+				elseif inTowers and line:find("%-%s+%S") then
+					local tower = line:match("%-%s+(.-)%s*$")
+					if tower and tower ~= "" then towers[#towers + 1] = tower end
+				end
+			end
+			local out = {}
+			if map and diff then
+				local row1 = "Map: " .. map .. " | Difficulty: " .. diff
+				if timeStr then row1 = row1 .. " | Time: " .. timeStr end
+				out[#out + 1] = row1
+			end
+			if mod and mod ~= "" then
+				out[#out + 1] = "<font color='#FFB347'>Modifier:</font>"
+				for part in (mod .. ","):gmatch("([^,]+),") do
+					local trimmed = part:match("^%s*(.-)%s*$")
+					if trimmed ~= "" then out[#out + 1] = "  " .. trimmed end
+				end
+			end
+			if #towers > 0 then
+				out[#out + 1] = "<font color='#5BC8F5'>Towers used:</font>"
+				for _, t in ipairs(towers) do out[#out + 1] = "  - " .. t end
+			end
+			content = #out > 0 and table.concat(out, "\n") or L.localscript_info_no_block
+		else
+			content = L.localscript_info_no_block
+		end
+		local scriptTitle = "main_" .. userId
+		local InfoModal = TabsWindow:PopupModal({ Title = scriptTitle })
+		InfoModal:Console({
+			Value    = content,
+			ReadOnly = true,
+			RichText = true,
+			Border   = true,
+			Size     = UDim2.new(1, 0, 0, 150),
+		})
+		local BtnRow = InfoModal:Row({ Expanded = true })
+		BtnRow:Button({
+			Text = L.localscript_save,
+			Callback = function()
+				local inputName = ""
+				local NameModal = TabsWindow:PopupModal({ Title = L.localscript_save_name_title })
+				NameModal:InputText({
+					Placeholder = L.localscript_save_name_ph,
+					Value = "",
+					Callback = function(_, text)
+						inputName = text
+					end,
+				})
+				local NRow = NameModal:Row({ Expanded = true })
+				NRow:Button({
+					Text = L.localscript_confirm_yes,
+					Callback = function()
+						local name = inputName:match("^%s*(.-)%s*$")
+						if name == "" then return end
+						local savePath = "Tsetingnil_script\\NTD\\Script\\" .. name .. ".lua"
+						local ok4, err = pcall(writefile, savePath, raw)
+						if ok4 then
+							Msg:Success(L.localscript_save_success .. ": " .. name)
+							NameModal:ClosePopup()
+							InfoModal:ClosePopup()
+							BuildScriptList()
+						else
+							Msg:Warning(L.localscript_save_error .. ": " .. tostring(err))
+						end
+					end,
+				})
+				NRow:Button({
+					Text = L.localscript_confirm_no,
+					Callback = function()
+						NameModal:ClosePopup()
+					end,
+				})
+			end,
+		})
+		BtnRow:Button({
+			Text = L.localscript_info_close,
+			Callback = function() InfoModal:ClosePopup() end,
+		})
 	end,
 })
 
