@@ -50,7 +50,6 @@ local i18n = {
 		envNotExist    = "環境檢查：本地環境不存在",
 		autoReplayOn   = "自動重新戰鬥：已開啟",
 		autoReplayOff  = "自動重新戰鬥：未開啟",
-		queueElapsed   = "佇列進度：",
 		queueRemaining = "佇列剩餘：",
 		queueNA        = "---",
 		queueOvertime  = "（超時）",
@@ -98,7 +97,6 @@ local i18n = {
 		envNotExist    = "Environment: Local env missing",
 		autoReplayOn   = "Auto Replay: Enabled",
 		autoReplayOff  = "Auto Replay: Disabled",
-		queueElapsed   = "Queue Elapsed: ",
 		queueRemaining = "Queue Remaining: ",
 		queueNA        = "---",
 		queueOvertime  = " (overtime)",
@@ -207,13 +205,6 @@ local AutoReplay_Label = Tab_main:Label({
 	TextColor3 = Color3.fromRGB(240, 240, 240),
 })
 
-local QueueElapsed_Label = Tab_main:Label({
-	Text = L.queueElapsed .. L.queueNA,
-	TextSize = fontSize or 16,
-	NoTheme = true,
-	TextColor3 = Color3.fromRGB(240, 240, 240),
-})
-
 local QueueRemaining_Label = Tab_main:Label({
 	Text = L.queueRemaining .. L.queueNA,
 	TextSize = fontSize or 16,
@@ -300,12 +291,6 @@ local function ReGameStateLabel()
 end
 
 local function UpdateQueueLabels()
-  local elapsed = NTD_API.GetQueueElapsed()
-  if elapsed then
-    QueueElapsed_Label.Text = L.queueElapsed .. string.format("%d s", elapsed)
-  else
-    QueueElapsed_Label.Text = L.queueElapsed .. L.queueNA
-  end
   local remaining = NTD_API.GetQueueRemaining()
   if remaining then
     if remaining < 0 then
