@@ -529,8 +529,16 @@ HeaderRow:Button({
 	Text = L.localscript_save_running,
 	Callback = function()
 		local userId = tostring(game.Players.LocalPlayer.UserId)
-		local mainPath = "Tsetingnil_script\\NTD\\main_" .. userId .. ".lua"
+		local mainPathBS = "Tsetingnil_script\\NTD\\main_" .. userId .. ".lua"
+		local mainPathFW = "Tsetingnil_script/NTD/main_" .. userId .. ".lua"
+		-- 判斷執行器支援的路徑格式
+		local useFW = isfile and isfile(mainPathFW) and not isfile(mainPathBS)
+		local mainPath = useFW and mainPathFW or mainPathBS
 		local ok3, raw = pcall(readfile, mainPath)
+		if not ok3 or not raw or raw == "" then
+			-- 備用：嘗試另一種路徑格式
+			ok3, raw = pcall(readfile, useFW and mainPathBS or mainPathFW)
+		end
 		if not ok3 or not raw or raw == "" then
 			Msg:Warning(L.localscript_save_no_running)
 			return
@@ -607,7 +615,9 @@ HeaderRow:Button({
 					Callback = function()
 						local name = inputName:match("^%s*(.-)%s*$")
 						if name == "" then return end
-						local savePath = "Tsetingnil_script\\NTD\\Script\\" .. name .. ".lua"
+						-- 根據執行器路徑格式選擇分隔符
+						local sep = useFW and "/" or "\\"
+						local savePath = "Tsetingnil_script" .. sep .. "NTD" .. sep .. "Script" .. sep .. name .. ".lua"
 						local outerBlock = raw:match("%-%-%[%[(.-)%]%]") or ""
 						local wrappedContent = "--[[\n" .. outerBlock .. "\n]]\n\n" ..
 							"-- ========== FULL SCRIPT ==========\n" ..
@@ -623,8 +633,8 @@ HeaderRow:Button({
 							"NTD.SaveLocalScript(fullScript)\n" ..
 							"loadstring(fullScript)()\n"
 						if not isfolder("Tsetingnil_script") then makefolder("Tsetingnil_script") end
-						if not isfolder("Tsetingnil_script\\NTD") then makefolder("Tsetingnil_script\\NTD") end
-						if not isfolder("Tsetingnil_script\\NTD\\Script") then makefolder("Tsetingnil_script\\NTD\\Script") end
+						if not (isfolder("Tsetingnil_script\\NTD") or isfolder("Tsetingnil_script/NTD")) then makefolder("Tsetingnil_script" .. sep .. "NTD") end
+						if not (isfolder("Tsetingnil_script\\NTD\\Script") or isfolder("Tsetingnil_script/NTD/Script")) then makefolder("Tsetingnil_script" .. sep .. "NTD" .. sep .. "Script") end
 						local ok4, err = pcall(writefile, savePath, wrappedContent)
 						if ok4 then
 							Msg:Success(L.localscript_save_success .. ": " .. name)
