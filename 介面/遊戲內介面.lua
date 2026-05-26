@@ -622,6 +622,9 @@ HeaderRow:Button({
 							"end\n\n" ..
 							"NTD.SaveLocalScript(fullScript)\n" ..
 							"loadstring(fullScript)()\n"
+						if not isfolder("Tsetingnil_script") then makefolder("Tsetingnil_script") end
+						if not isfolder("Tsetingnil_script\\NTD") then makefolder("Tsetingnil_script\\NTD") end
+						if not isfolder("Tsetingnil_script\\NTD\\Script") then makefolder("Tsetingnil_script\\NTD\\Script") end
 						local ok4, err = pcall(writefile, savePath, wrappedContent)
 						if ok4 then
 							Msg:Success(L.localscript_save_success .. ": " .. name)
