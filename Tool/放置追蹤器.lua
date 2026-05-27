@@ -55,6 +55,7 @@ local gameSettings = {
 -- === 腳本設定 ===
 local ScriptSettings = {
 	AutoReplay = true,
+	RecordSpecialMutation = false,
 }
 
 local currentLang = "en"  -- default，若讀取失敗保持 EN
@@ -99,7 +100,9 @@ local Lang = {
 		lblGameInfo      = "ℹ️ 遊戲資訊",
 		lblTrackerOp     = "🛠️ 追蹤器操作",
 		lblScriptParam   = "📝 腳本參數",
-		lblAutoReplay    = "自動重播 (AutoReplay)",
+		lblAutoReplay        = "自動重播 (AutoReplay)",
+		lblRecordMutation    = "記錄全部突變附魔",
+		lblRecordMutationDesc= "開啟後腳本將記錄塔的所有附魔/突變（停用時僅記錄閃亮塔）",
 		lblFileName      = "輸入腳本名稱:",
 		phFileName       = "輸入腳本名稱...",
 		infoFmt          = "地圖: %s\n難易度: %s\n效果: %s",
@@ -158,7 +161,9 @@ local Lang = {
 		lblGameInfo      = "ℹ️ Game Info",
 		lblTrackerOp     = "🛠️ Tracker Ops",
 		lblScriptParam   = "📝 Script Params",
-		lblAutoReplay    = "Auto Replay",
+		lblAutoReplay        = "Auto Replay",
+		lblRecordMutation    = "Record All Mutations & Enchants",
+		lblRecordMutationDesc= "Includes all tower enchants/mutations in scripts (Shiny is always recorded)",
 		lblFileName      = "Script name:",
 		phFileName       = "Enter script name...",
 		infoFmt          = "Map: %s\nDifficulty: %s\nModifier: %s",
@@ -250,6 +255,24 @@ local abilityLog   = {}   -- { gameId, order, abilityName, elapsed }
 local lastDetectedSpeed = 1
 
 local DEBUG_MODE = false
+local towerUUIDData = {}  -- uuid -> { towerType, mutations }
+
+local function getMutLabel(uuid)
+	local pdata = uuid and towerUUIDData[uuid]
+	if not pdata or not pdata.mutations or not next(pdata.mutations) then return "" end
+	local parts = {}
+	for k, v in pairs(pdata.mutations) do
+		local isShiny = (k == "Shiny")
+		if isShiny or ScriptSettings.RecordSpecialMutation then
+			if v == true then
+				table.insert(parts, tostring(k))
+			elseif type(v) == "string" and v ~= "" then
+				table.insert(parts, tostring(k) .. ":" .. v)
+			end
+		end
+	end
+	return #parts > 0 and (" [" .. table.concat(parts, ", ") .. "]") or ""
+end
 
 -- === 遊戲狀態追蹤 ===
 local isGameRunning = false
@@ -740,16 +763,18 @@ local function createLabel(key, parent, order)
 	return label
 end
 
-local function createToggle(labelKey, parent, order, defaultValue, callback)
+local function createToggle(labelKey, parent, order, defaultValue, callback, descKey)
+	local frameH = descKey and 65 or 40
 	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1, 0, 0, 40)
+	frame.Size = UDim2.new(1, 0, 0, frameH)
 	frame.BackgroundTransparency = 1
 	frame.LayoutOrder = order
 	frame.ZIndex = 12
 	frame.Parent = parent
 
 	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(0.75, 0, 1, 0)
+	lbl.Size = UDim2.new(0.75, 0, 0, 40)
+	lbl.Position = UDim2.new(0, 0, 0, 0)
 	lbl.BackgroundTransparency = 1
 	lbl.TextColor3 = Theme.Text
 	lbl.Font = Theme.Font
@@ -762,7 +787,7 @@ local function createToggle(labelKey, parent, order, defaultValue, callback)
 	local isOn = defaultValue
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(0, 55, 0, 28)
-	btn.Position = UDim2.new(1, -60, 0.5, -14)
+	btn.Position = UDim2.new(1, -60, 0, 6)
 	btn.BackgroundColor3 = isOn and Theme.Success or Theme.SurfaceHighlight
 	btn.Text = isOn and T("toggleOn") or T("toggleOff")
 	btn.TextColor3 = isOn and Theme.TextDark or Theme.TextDim
@@ -782,6 +807,22 @@ local function createToggle(labelKey, parent, order, defaultValue, callback)
 		btn.TextColor3 = isOn and Theme.TextDark or Theme.TextDim
 		if callback then callback(isOn) end
 	end)
+
+	if descKey then
+		local descLabel = Instance.new("TextLabel")
+		descLabel.Size = UDim2.new(1, -8, 0, 22)
+		descLabel.Position = UDim2.new(0, 4, 0, 41)
+		descLabel.BackgroundTransparency = 1
+		descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+		descLabel.Font = Theme.Font
+		descLabel.TextSize = 14
+		descLabel.TextXAlignment = Enum.TextXAlignment.Left
+		descLabel.TextWrapped = true
+		descLabel.ZIndex = 13
+		descLabel.Parent = frame
+		bindText(descLabel, descKey)
+	end
+
 	return btn
 end
 
@@ -848,6 +889,9 @@ createLabel("lblScriptParam", paramScrollFrame, 13)
 createToggle("lblAutoReplay", paramScrollFrame, 14, ScriptSettings.AutoReplay, function(v)
 	ScriptSettings.AutoReplay = v
 end)
+createToggle("lblRecordMutation", paramScrollFrame, 15, ScriptSettings.RecordSpecialMutation, function(v)
+	ScriptSettings.RecordSpecialMutation = v
+end, "lblRecordMutationDesc")
 
 -- ============================================================
 -- 拖移功能
@@ -1055,13 +1099,30 @@ local function generateScript()
 		return nil
 	end
 
-	local usedTowers = {}
+	-- usedTowers: { name, uuid } per unique (towerType + mutation signature)
+	local usedTowers   = {}
+	local seenTowerKey = {}
 	for order = 1, nextOrder - 1 do
 		local info = orderToInfo[order]
 		if info and info.UnitType then
-			local found = false
-			for _, n in ipairs(usedTowers) do if n == info.UnitType then found = true; break end end
-			if not found then table.insert(usedTowers, info.UnitType) end
+			local uuid = info.UUID
+			local mutParts = {}
+			local pdata = uuid and towerUUIDData[uuid]
+			if pdata and pdata.mutations then
+				for k, v in pairs(pdata.mutations) do
+					local isShiny = (k == "Shiny")
+					if isShiny or ScriptSettings.RecordSpecialMutation then
+						if v == true then table.insert(mutParts, tostring(k))
+						elseif type(v) == "string" and v ~= "" then table.insert(mutParts, tostring(k)..":"..v) end
+					end
+				end
+			end
+			table.sort(mutParts)
+			local key = info.UnitType .. "|" .. table.concat(mutParts, ",")
+			if not seenTowerKey[key] then
+				seenTowerKey[key] = true
+				table.insert(usedTowers, { name = info.UnitType, uuid = uuid })
+			end
 		end
 	end
 
@@ -1129,8 +1190,8 @@ local function generateScript()
 	end
 	if #usedTowers > 0 then
 		table.insert(fullLines, "Towers used:")
-		for _, name in ipairs(usedTowers) do
-			table.insert(fullLines, string.format("  - %s", name))
+		for _, entry in ipairs(usedTowers) do
+			table.insert(fullLines, string.format("  - %s%s", entry.name, getMutLabel(entry.uuid)))
 		end
 		table.insert(fullLines, "")
 	end
@@ -1156,13 +1217,38 @@ local function generateScript()
 	end
 	if #usedTowers > 0 then
 		local towerList = {}
-		for _, name in ipairs(usedTowers) do
-			table.insert(towerList, string.format('"%s"', name))
+		for _, entry in ipairs(usedTowers) do
+			local pdata = entry.uuid and towerUUIDData[entry.uuid]
+			local mutations = pdata and pdata.mutations
+			local mutStrings = {}
+			if mutations then
+				for k, v in pairs(mutations) do
+					local isShiny = (k == "Shiny")
+					if isShiny or ScriptSettings.RecordSpecialMutation then
+						if v == true then
+							table.insert(mutStrings, string.format('"%s"', tostring(k)))
+						elseif type(v) == "string" and v ~= "" then
+							table.insert(mutStrings, string.format('"%s"', v))
+						end
+					end
+				end
+			end
+			if #mutStrings == 1 then
+				table.insert(towerList, string.format('{ "%s", %s }', entry.name, mutStrings[1]))
+			elseif #mutStrings > 1 then
+				table.insert(towerList, string.format('{ "%s", { %s } }', entry.name, table.concat(mutStrings, ", ")))
+			else
+				table.insert(towerList, string.format('"%s"', entry.name))
+			end
 		end
 		if #towerList == 1 then
 			table.insert(fullLines, string.format('\tNTD.EquipTower(%s)', towerList[1]))
 		else
-			table.insert(fullLines, string.format('\tNTD.EquipTower({ %s })', table.concat(towerList, ", ")))
+			table.insert(fullLines, '\tNTD.EquipTower({')
+			for _, t in ipairs(towerList) do
+				table.insert(fullLines, '\t\t' .. t .. ',')
+			end
+			table.insert(fullLines, '\t})')
 		end
 	end
 	if gameSettings.mapId and gameSettings.mapId ~= "Unknown" then
@@ -1216,9 +1302,14 @@ local function generateScript()
 			local x = info.Position and info.Position.X or 0
 			local y = info.Position and info.Position.Y or 0
 			local z = info.Position and info.Position.Z or 0
+
+			-- 只有 Shiny 需要傳 condition（Shiny 版和非 Shiny 版在遊戲內是不同計數器）
+			local pdata = info.UUID and towerUUIDData[info.UUID]
+			local condArg = (pdata and pdata.mutations and pdata.mutations["Shiny"] == true) and ', "Shiny"' or ""
+
 			table.insert(fullLines, string.format(
-				'\tNTD.AddPlaceTower("%s", %.3f, %.3f, %.3f, 0, %.1f) -- #%d +%.1fs',
-				info.UnitType, x, y, z, e, info.Index, e))
+				'\tNTD.AddPlaceTower("%s", %.3f, %.3f, %.3f, 0, %.1f%s) -- #%d +%.1fs',
+				info.UnitType, x, y, z, e, condArg, info.Index, e))
 		elseif op.type == "upgrade" then
 			if op.order then
 				table.insert(fullLines, string.format(
@@ -1287,8 +1378,8 @@ local function generateScript()
 	table.insert(script, "")
 	if #usedTowers > 0 then
 		table.insert(script, "Towers used:")
-		for _, name in ipairs(usedTowers) do
-			table.insert(script, string.format("  - %s", name))
+		for _, entry in ipairs(usedTowers) do
+			table.insert(script, string.format("  - %s%s", entry.name, getMutLabel(entry.uuid)))
 		end
 		table.insert(script, "")
 	end
@@ -1412,7 +1503,7 @@ debugBtn.MouseButton1Click:Connect(function()
 		for order = 1, nextOrder - 1 do
 			local info = orderToInfo[order]
 			if info then
-				addLog(T("logTowerItem"):format(info.order, info.UnitType, tostring(info.GameID), info.Elapsed or 0),
+				addLog(T("logTowerItem"):format(info.order, info.UnitType .. getMutLabel(info.UUID), tostring(info.GameID), info.Elapsed or 0),
 					Color3.fromRGB(200, 200, 200))
 			end
 		end
@@ -1456,10 +1547,12 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 		local placeArgs = args[1]
 		local towerName = (type(placeArgs) == "table" and placeArgs.towerToPlace) or "Unknown"
 		local targetPos = (type(placeArgs) == "table" and placeArgs.position) or nil
+		local placeUUID = (type(placeArgs) == "table" and placeArgs.towerID) or nil
 
 		local result = oldNamecall(self, ...)
 
 		task.spawn(function()
+			if not isGameRunning then return end
 			local elapsed = getElapsed()
 
 			if type(result) == "table" and result.id then
@@ -1467,18 +1560,20 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 					order       = nextOrder,
 					name        = towerName,
 					id          = result.id,
+					uuid        = placeUUID,
 					position    = targetPos,
 					Index       = nextOrder,
 					UnitType    = towerName,
 					DisplayName = towerName,
 					Position    = targetPos,
 					GameID      = result.id,
+					UUID        = placeUUID,
 					Rotation    = 0,
 					Elapsed     = elapsed,
 				}
 				orderToInfo[nextOrder] = info
 				idToOrder[result.id]   = nextOrder
-				addLog(T("logPlaceTower"):format(nextOrder, towerName, elapsed), Color3.fromRGB(100, 255, 100))
+				addLog(T("logPlaceTower"):format(nextOrder, towerName .. getMutLabel(placeUUID), elapsed), Color3.fromRGB(100, 255, 100))
 				if DEBUG_MODE then
 					print(string.format("[NTD Tracker] 放置 #%d %s id=%s +%.1fs",
 						nextOrder, towerName, tostring(result.id), elapsed))
@@ -1501,6 +1596,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 
 		task.spawn(function()
 			if result ~= true then return end
+			if not isGameRunning then return end
 
 			local order   = towerId and idToOrder[towerId]
 			local info    = order and orderToInfo[order]
@@ -1535,6 +1631,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 
 		task.spawn(function()
 			if result ~= true then return end
+			if not isGameRunning then return end
 
 			local order   = towerId and idToOrder[towerId]
 			local info    = order and orderToInfo[order]
@@ -1568,6 +1665,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 
 	-- === 跳過波次 (FireServer) ===
 	if method == "FireServer" and SkipWaveRemote and self == SkipWaveRemote then
+		if not isGameRunning then return oldNamecall(self, ...) end
 		local elapsed = getElapsed()
 		table.insert(skipWaveLog, { elapsed = elapsed })
 		addLog(T("logSkipWave"):format(elapsed), Color3.fromRGB(150, 150, 255))
@@ -1576,6 +1674,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 
 	-- === 速度設定 (FireServer) ===
 	if method == "FireServer" and GameSpeedRemote and self == GameSpeedRemote then
+		if not isGameRunning then return oldNamecall(self, ...) end
 		local speed = args[1] or 1
 		local elapsed = getElapsed()
 		if speed ~= lastDetectedSpeed then
@@ -1595,6 +1694,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 		local result = oldNamecall(self, ...)
 
 		task.spawn(function()
+			if not isGameRunning then return end
 			local order   = towerId and idToOrder[towerId]
 			local info    = order and orderToInfo[order]
 			local elapsed = getElapsed()
@@ -1697,6 +1797,28 @@ local function InitTracker()
 				addLog(T("logModRemove"):format(child.Name, gameSettings.modifier), Color3.fromRGB(180, 180, 180))
 			end)
 		end
+	end)
+
+	-- 讀取本地塔資料（含 Mutation）
+	pcall(function()
+		local Constants = nil
+		for _, obj in ipairs(getgc(true)) do
+			if type(obj) == "table" and rawget(obj, "currentPlrData") then
+				Constants = obj
+				break
+			end
+		end
+		if not Constants then return end
+		local items = Constants.currentPlrData and Constants.currentPlrData.Items
+		if not items or not items.Towers then return end
+		local count = 0
+		for uuid, data in pairs(items.Towers) do
+			if type(uuid) == "string" and data.Tower then
+				towerUUIDData[uuid] = { towerType = data.Tower, mutations = data.Mutations }
+				count = count + 1
+			end
+		end
+		print(string.format("[NTD Tracker] 已讀取 %d 座塔資料 (含 Mutation)", count))
 	end)
 
 	if not ok then
