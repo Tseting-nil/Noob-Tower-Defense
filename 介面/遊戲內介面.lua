@@ -30,6 +30,7 @@ local i18n = {
 	zh = {
 		windowTitle    = "遊戲內介面",
     tab_main       = "Main",
+    tab_playinfo = "玩家資訊",
     tab_localscript = "本地腳本",
 		sectionStatus  = "當前狀態",
 		envChecking    = "環境檢查中...",
@@ -80,10 +81,16 @@ local i18n = {
 		localscript_save_success    = "已儲存",
 		localscript_save_error      = "儲存失敗",
 		localscript_save_no_running = "無正在運行的腳本",
+		playCoinInit           = "金幣：---",
+		playGemInit            = "鑽石：---",
+		playCurrencyNotFound   = "找不到玩家貨幣資料，請確認已進入遊戲",
+		playCoinFmt            = "金幣：%d",
+		playGemFmt             = "鑽石：%d",
 	},
 	en = {
 		windowTitle    = "In-Game UI",
     tab_main       = "Main",
+    tab_playinfo = "Player Info",
     tab_localscript = "Local Script",
 		sectionStatus  = "Current Status",
 		envChecking    = "Checking environment...",
@@ -134,6 +141,11 @@ local i18n = {
 		localscript_save_success    = "Saved",
 		localscript_save_error      = "Save failed",
 		localscript_save_no_running = "No running script",
+		playCoinInit           = "Coins: ---",
+		playGemInit            = "Gems: ---",
+		playCurrencyNotFound   = "Player currency data not found, please confirm you have entered the game",
+		playCoinFmt            = "Coins: %d",
+		playGemFmt             = "Gems: %d",
 	},
 }
 
@@ -163,6 +175,7 @@ local Tabs = {}
 
 for _, Name in ipairs({
 	L.tab_main,
+  L.tab_playinfo,
   L.tab_localscript
 }) do
 	local Tab = TabsWindow:CreateTab({
@@ -189,7 +202,12 @@ local Tab_main = Tabs[1]:ScrollingCanvas({
 	UiPadding = UDim.new(0, 0)
 })
 
-local Tab_Localscript = Tabs[2]:ScrollingCanvas({
+local Tab_playinfo = Tabs[2]:ScrollingCanvas({
+  Fill = true,
+  UiPadding = UDim.new(0, 0)
+})
+
+local Tab_Localscript = Tabs[3]:ScrollingCanvas({
 	Fill = true,
 	UiPadding = UDim.new(0, 0)
 })
@@ -337,6 +355,33 @@ task.spawn(function()
     end
     task.wait(1)
   end
+end)
+
+-- ========================================================================== --
+-- Tab_playinfo
+local play_coin = Tab_playinfo:Label({
+  Text = L.playCoinInit,
+  TextSize = fontSize or 16,
+  NoTheme = true,
+  TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+local play_gem = Tab_playinfo:Label({
+  Text = L.playGemInit,
+  TextSize = fontSize or 16,
+  NoTheme = true,
+  TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+task.spawn(function()
+  local ReplicatedStorage = game:GetService("ReplicatedStorage")
+  local Constants = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Constants"))
+  local currencies = Constants.currentPlrData and Constants.currentPlrData.Currencies
+  if not currencies then
+    warn(L.playCurrencyNotFound)
+    return
+  end
+  play_gem.Text = string.format(L.playGemFmt, math.floor(currencies.Gems or 0))
+  play_coin.Text = string.format(L.playCoinFmt, math.floor(currencies.Coins or 0))
 end)
 
 -- ========================================================================== --
