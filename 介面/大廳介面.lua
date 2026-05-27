@@ -49,12 +49,16 @@ local L = {
 		draw_box          = "抽取通行證箱子",
 		draw_speed        = "抽取速度 = %.1f",
 		skip_draw_anim    = "跳過抽取動畫",
+		summon_notify        = "通知",
+		summon_notify_shiny  = "閃亮 %s  %s",
+		summon_notify_rarity = "%s  %s",
 		skip_enchant      = "跳過附魔等待",
 		block_popup       = "去除煩人的彈窗",
 		auto_x10          = "自動x10",
 		single_pull       = "單抽出奇蹟!!",
-		cooldown_ready    = "可抽取",
-		cooldown_waiting  = "冷卻中",
+		cooldown_ready    = "狀態: 可抽取",
+		cooldown_waiting  = "狀態: 冷卻中",
+    Skip_Summon       = "跳過抽取動畫",
 		msg_claimed       = "已領取: %d 個獎勵",
 		msg_no_rewards    = "無可領取獎勵",
 		msg_pass_done     = "完成自動領取通行證獎勵",
@@ -64,6 +68,9 @@ local L = {
 		msg_cooldown      = "等待冷卻 %d 秒",
 		msg_block_popup   = "已封鎖最愛彈窗",
 		msg_turntable_done    = "已領取每日轉盤獎勵",
+    pity_separator        = "保底進度",
+    msg_nocoin            = "金幣不足",
+		msg_auto_conflict     = "另一個自動抽取正在執行中",
 		localscript_path      = "路徑: ",
 		localscript_list      = "腳本列表",
 		localscript_refresh   = "重新整理",
@@ -103,12 +110,16 @@ local L = {
 		draw_box          = "Draw Battle Pass Crate",
 		draw_speed        = "Draw Speed = %.1f",
 		skip_draw_anim    = "Skip Draw Animation",
+		summon_notify        = "Notify",
+		summon_notify_shiny  = "Shiny %s  %s",
+		summon_notify_rarity = "%s  %s",
 		skip_enchant      = "Skip Enchant Wait",
 		block_popup       = "Block Annoying Popups",
 		auto_x10          = "Auto x10",
 		single_pull       = "Single Pull Miracle!!",
-		cooldown_ready    = "Ready",
-		cooldown_waiting  = "On Cooldown",
+		cooldown_ready    = "State: Ready",
+		cooldown_waiting  = "State: On Cooldown",
+    Skip_Summon       = "Skip Summon Animation",
 		msg_claimed       = "Claimed: %d rewards",
 		msg_no_rewards    = "No rewards to collect",
 		msg_pass_done     = "Auto collect battle pass rewards complete",
@@ -118,6 +129,9 @@ local L = {
 		msg_cooldown      = "Cooldown %d seconds",
 		msg_block_popup   = "Favourite popup blocked",
 		msg_turntable_done    = "Daily Spin reward collected",
+    pity_separator        = "Pity Progress",
+    msg_nocoin            = "Not enough coins",
+		msg_auto_conflict     = "Another auto-summon is already running",
 		localscript_path      = "Path: ",
 		localscript_list      = "Script List",
 		localscript_refresh   = "Refresh",
@@ -171,10 +185,25 @@ local Scripttable = {
     Skip_DrawBox_Animation = true,
   },
 	Summon = {
+    Skip = false,
     ISCooldown = false,
     Cooldown = 4,
 		Retro_enable = false,
 		Standard_enable = false,
+    Gui = UI.Frames.Summon,
+    notify = {
+      enable = true,
+      HIGH_TIER = {
+        Common    = false,
+        Rare      = false,
+        Epic      = false,
+        Legendary = false,
+        Mythic    = true,
+        Secret    = true,
+        Exclusive = true,
+      },
+      NOTIFY_SHINY = true,
+    },
 	},
 	blockFavouritePrompt = true,
   Skip_Enchanting = false,
@@ -323,10 +352,80 @@ Mainfunction.Gamepass_Task_Reward = function()
 	end
 end
 
+-- getgc 抓 towersData
+local _TowersData
+for _, obj in ipairs(getgc(true)) do
+  if type(obj) == "table"
+      and rawget(obj, "getTowerData")
+      and rawget(obj, "Rarities") then
+    _TowersData = obj
+    break
+  end
+end
+
+local function _getRarity(towerName)
+  if not _TowersData then return "Unknown" end
+  local ok, data = pcall(_TowersData.getTowerData, towerName)
+  if ok and type(data) == "table" then return data.Rarity end
+  return "Unknown"
+end
+
+local function _formatTowerName(s)
+  return s:gsub("(%l)(%u)", "%1 %2")
+end
+
 -- Hook
 local _SpinRemote    = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("SpinBattlepassCrate")
 local _EnchantRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Enchant")
+local _SummonRemote  = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon")
 local _lastSpinData = nil
+local _PityConfig = {
+	{ key = "Legendary", label = currentLang == "zh" and "傳奇" or "Legendary", max = 50    },
+	{ key = "Mythic",    label = currentLang == "zh" and "神話" or "Mythic",    max = 400   },
+	{ key = "Secret",    label = currentLang == "zh" and "秘密" or "Secret",    max = 10000 },
+}
+
+local _summonResultQueue = {}
+game:GetService("RunService").Heartbeat:Connect(function()
+	if #_summonResultQueue == 0 then return end
+	local items = _summonResultQueue
+	_summonResultQueue = {}
+	for _, data in ipairs(items) do
+		local pity, result = data.pity, data.result
+		if type(pity) == "table" then
+			for _, cfg in ipairs(_PityConfig) do
+				if cfg.bar and pity[cfg.key] ~= nil then
+					local v   = tonumber(pity[cfg.key]) or 0
+					local pct = v / cfg.max * 100
+					cfg.bar:SetValue(pct)
+					cfg.bar:SetValueText(string.format("%d / %d (%.2f%%)", v, cfg.max, pct))
+				end
+			end
+		end
+		local n = Scripttable.Summon.notify
+		if n.enable and type(result) == "table" then
+			for _, entry in ipairs(result) do
+				local tower    = entry.tower or "?"
+				local shiny    = entry.shiny == true
+				local rarity   = _getRarity(tower)
+				local rarityHit = n.HIGH_TIER[rarity] == true
+				local shinyHit  = shiny and n.NOTIFY_SHINY
+				if rarityHit or shinyHit then
+					local displayName = _formatTowerName(tower)
+					local label
+					if shiny then
+						label = string.format(T.summon_notify_shiny, rarity, displayName)
+					else
+						label = string.format(T.summon_notify_rarity, rarity, displayName)
+					end
+					print("[Summon Notify] " .. label)
+					Msg:Success(label)
+				end
+			end
+		end
+	end
+end)
+
 local _oldNamecall
 _oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 	if getnamecallmethod() == "PromptSetFavorite" then
@@ -352,11 +451,15 @@ _oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 					repeat task.wait(0.1); t += 0.1 until SkipBtn.Visible or t >= 10
 					if SkipBtn.Visible then
 						firesignal(SkipBtn.Button.Activated)
-						-- print("[Enchant] 跳過動畫")
 					end
 				end)
 			end
 			return result
+		end
+		if self == _SummonRemote then
+			local result, pity = _oldNamecall(self, ...)
+			_summonResultQueue[#_summonResultQueue + 1] = { result = result, pity = pity }
+			return result, pity
 		end
 	end
 	return _oldNamecall(self, ...)
@@ -428,22 +531,28 @@ Mainfunction.Gamepass_DrawBox = function()
 	end
 end
 
--- 抽取Retro
-Mainfunction.Summon_Retro = function(x)
+-- 抽取召喚 ("Standard","Retro")
+Mainfunction.Summon = function(x, BannerType)
   if Scripttable.Summon.ISCooldown then
     Msg:Warning(string.format(T.msg_cooldown, Scripttable.Summon.Cooldown))
     return
   end
-	ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(x, "Retro")
-end
-
--- 抽取Standard
-Mainfunction.Summon_Standard = function(x)
-  if Scripttable.Summon.ISCooldown then
-    Msg:Warning(string.format(T.msg_cooldown, Scripttable.Summon.Cooldown))
+  local Coin = Gametable.LocalPlayer.Coins.Value
+  local cost = x == 1 and 200 or 1800
+  if Coin < cost then
+    Msg:Warning(T.msg_nocoin)
+    return "Not enough coins"
+  end
+  if Scripttable.Summon.Skip then
+    ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(x, "Retro")
     return
   end
-	ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(x, "Standard")
+  local banner_name = BannerType or "Standard"
+  local banner_btn = Scripttable.Summon.Gui.Container.Banners[banner_name].Button
+  firesignal(banner_btn.Activated)
+  local summon_key = x == 1 and "Summon1" or "Summon2"
+  local Summon_btn = Scripttable.Summon.Gui.Container.Buttons[summon_key].Button
+  firesignal(Summon_btn.Activated)
 end
 
 -- ========================================================================== --
@@ -659,7 +768,7 @@ Row_Retro:Button({
       Msg:Warning(string.format(T.msg_cooldown, Scripttable.Summon.Cooldown))
       return
     end
-		Mainfunction.Summon_Retro(1)
+		Mainfunction.Summon(1, "Standard")
     Scripttable.Summon.ISCooldown = true
     task.wait(Scripttable.Summon.Cooldown)
     Scripttable.Summon.ISCooldown = false
@@ -673,16 +782,30 @@ Row_Retro:Radiobox({
 	TextSize = radioTextSize,
 	Disabled = false,
 	Callback = function(self, Value)
-		Scripttable.Summon.Retro_enable = Value
-		if Scripttable.Summon.Retro_enable then
+		if Value then
+			if Scripttable.Summon.AutoRunning then
+        Msg:Warning(T.msg_auto_conflict)
+				self:SetValue(false)
+				return
+			end
+			Scripttable.Summon.AutoRunning = true
+			Scripttable.Summon.Retro_enable = true
 			task.spawn(function()
 				while Scripttable.Summon.Retro_enable do
-					Mainfunction.Summon_Retro(10)
-          Scripttable.Summon.ISCooldown = true
-          task.wait(Scripttable.Summon.Cooldown)
-          Scripttable.Summon.ISCooldown = false
+					local start = Mainfunction.Summon(10, "Standard")
+          if start == "Not enough coins" then
+            self:SetValue(false)
+            return
+          end
+					Scripttable.Summon.ISCooldown = true
+					task.wait(Scripttable.Summon.Cooldown)
+					Scripttable.Summon.ISCooldown = false
 				end
+				Scripttable.Summon.AutoRunning = false
 			end)
+		else
+      Scripttable.Summon.AutoRunning = false
+			Scripttable.Summon.Retro_enable = false
 		end
 	end,
 })
@@ -700,7 +823,7 @@ Row_Standard:Button({
       Msg:Warning(string.format(T.msg_cooldown, Scripttable.Summon.Cooldown))
       return
     end
-		Mainfunction.Summon_Standard(1)
+		Mainfunction.Summon(1, "Retro")
     Scripttable.Summon.ISCooldown = true
     task.wait(Scripttable.Summon.Cooldown)
     Scripttable.Summon.ISCooldown = false
@@ -714,19 +837,64 @@ Row_Standard:Radiobox({
 	TextSize = radioTextSize,
 	Disabled = false,
 	Callback = function(self, Value)
-		Scripttable.Summon.Standard_enable = Value
-		if Scripttable.Summon.Standard_enable then
+		if Value then
+			if Scripttable.Summon.AutoRunning then
+        Msg:Warning(T.msg_auto_conflict)
+				self:SetValue(false)
+				return
+			end
+			Scripttable.Summon.AutoRunning = true
+			Scripttable.Summon.Standard_enable = true
 			task.spawn(function()
 				while Scripttable.Summon.Standard_enable do
-					Mainfunction.Summon_Standard(10)
-          Scripttable.Summon.ISCooldown = true
-          task.wait(Scripttable.Summon.Cooldown)
-          Scripttable.Summon.ISCooldown = false
+					local start = Mainfunction.Summon(10, "Retro")
+					if start == "Not enough coins" then
+						self:SetValue(false)
+            return
+					end
+					Scripttable.Summon.ISCooldown = true
+					task.wait(Scripttable.Summon.Cooldown)
+					Scripttable.Summon.ISCooldown = false
 				end
+				Scripttable.Summon.AutoRunning = false
 			end)
+		else
+      Scripttable.Summon.AutoRunning = false
+			Scripttable.Summon.Standard_enable = false
 		end
 	end,
 })
+
+local Row_SummonOptions = Tab_Summon:Row()
+
+Row_SummonOptions:Radiobox({
+  Value    = false,
+  Label    = T.Skip_Summon,
+  TextSize = radioTextSize,
+  Callback = function(self, Value)
+    Scripttable.Summon.Skip = Value
+  end,
+})
+
+Row_SummonOptions:Radiobox({
+  Value    = true,
+  Label    = T.summon_notify,
+  TextSize = radioTextSize,
+  Callback = function(self, Value)
+    Scripttable.Summon.notify.enable = Value
+  end,
+})
+
+Tab_Summon:Separator({ Text = T.pity_separator })
+for _, cfg in ipairs(_PityConfig) do
+  cfg.bar = Tab_Summon:ProgressBar({
+    Label    = cfg.label,
+    Value    = 0,
+    MinValue = 0,
+    MaxValue = 100,
+    Format   = "%d",
+  })
+end
 
 -- ========================================================================== --
 -- Tab_Localscript
