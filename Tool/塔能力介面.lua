@@ -170,8 +170,8 @@ local function buildTowerCard(gameId)
 	for _, key in ipairs(info.abilityKeys) do
 		local abi = TowerAbilitiesData[key]
 		if not abi then
-			dbg("找不到能力資料:", key)
-			continue
+			dbg("找不到能力資料，使用預設:", key)
+			abi = { Name = key, Cooldown = 30 }
 		end
 
 		local capturedGid = gameId
@@ -201,7 +201,7 @@ local function buildTowerCard(gameId)
 					local ok, result = pcall(function()
 						return TowerAbilityRemote:InvokeServer(tostring(capturedGid), capturedKey)
 					end)
-					if ok and result == true and towerList[capturedGid] then
+					if ok and result ~= false and towerList[capturedGid] then
 						towerList[capturedGid].cooldowns[capturedKey] = tick()
 					end
 				end)
@@ -371,7 +371,19 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 
 				table.insert(pendingUIActions, { type = "show" })
 
-				if result == true and towerId and abilityKey and towerList[towerId] then
+				-- result ~= false：伺服器可能回傳 nil 而非 true，不應視為失敗
+				if towerId and abilityKey and result ~= false then
+					-- 若塔不在追蹤清單（腳本載入前已放置），動態建立條目
+					if not towerList[towerId] then
+						dbg("動態追蹤未記錄的塔 gid=", towerId)
+						towerList[towerId] = {
+							name        = "?",
+							order       = nextOrder,
+							abilityKeys = {},
+							cooldowns   = {},
+						}
+						nextOrder = nextOrder + 1
+					end
 					local info = towerList[towerId]
 					info.cooldowns[abilityKey] = tick()
 					local alreadyKnown = table.find(info.abilityKeys, abilityKey) ~= nil
