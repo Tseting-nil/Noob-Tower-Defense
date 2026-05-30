@@ -3,6 +3,7 @@ local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 
 -- === 裝置檢測 ===
@@ -18,6 +19,7 @@ local UISizes = {
 	saveFramePosition      = isMobile and UDim2.new(0.5, -140, 0.5, -100) or UDim2.new(0.5, -175, 0.5, -115),
 	manageFrame            = isMobile and UDim2.new(0, 300, 0, 350) or UDim2.new(0, 400, 0, 450),
 	manageFramePosition    = isMobile and UDim2.new(0.5, -150, 0.5, -175) or UDim2.new(0.5, -200, 0.5, -225),
+	abilityFrame           = isMobile and UDim2.new(0, 300, 0, 400) or UDim2.new(0, 380, 0, 450),
 }
 
 -- === 全局下拉選單管理 ===
@@ -37,6 +39,7 @@ local Theme = {
 	Success         = Color3.fromRGB(100, 220, 120),
 	Warning         = Color3.fromRGB(255, 180, 60),
 	Error           = Color3.fromRGB(255, 80, 80),
+	Purple          = Color3.fromRGB(180, 100, 255),
 	CornerRadius    = UDim.new(0, 10),
 	Font            = Enum.Font.GothamMedium,
 	FontBold        = Enum.Font.GothamBold,
@@ -58,7 +61,7 @@ local ScriptSettings = {
 	RecordSpecialMutation = false,
 }
 
-local currentLang = "en"  -- default，若讀取失敗保持 EN
+local currentLang = "en"
 do
 	local API_VAR_PATH = "Tsetingnil_script/NTD/API_VAR.json"
 	pcall(function()
@@ -78,12 +81,14 @@ do
 		end
 	end)
 end
+
 local Lang = {
 	zh = {
 		titleMain        = "新手塔房 | 排程追蹤器",
 		titleParam       = "  ⚙️ 參數設定",
 		titleSave        = "  💾 儲存腳本",
 		titleManage      = "  📁 腳本管理",
+		titleAbility     = "  ⚡ 塔能力控制台",
 		btnCopy          = "📋 複製",
 		btnCopied        = "✅ 已複製",
 		btnSave          = "💾 儲存",
@@ -91,6 +96,7 @@ local Lang = {
 		btnRefresh       = "🔄 刷新",
 		btnReset         = "🔄 重置追蹤器",
 		btnDebug         = "🔍 塔追蹤清單",
+		btnAbility       = "⚡ 能力",
 		btnConfirmSave   = "✅ 確認儲存",
 		btnCancel        = "❌ 取消",
 		toggleOn         = "開",
@@ -106,12 +112,18 @@ local Lang = {
 		lblFileName      = "輸入腳本名稱:",
 		phFileName       = "輸入腳本名稱...",
 		infoFmt          = "地圖: %s\n難易度: %s\n效果: %s",
+		lblSaveMode      = "儲存模式",
+		saveMerged       = "合併",
+		saveSeparate     = "分離",
 		logNoOps         = "⚠️ 沒有可生成的操作記錄",
 		logSaved         = "✅ 已儲存: %s",
+		logSavedPhase2   = "✅ 已儲存 Phase2: %s",
 		logSaveFailed    = "❌ 儲存失敗: %s",
 		logNoScripts     = "尚無已儲存的腳本",
 		logCopied        = "📋 已複製: %s",
 		logDeleted       = "🗑️ 已刪除: %s",
+		logRunPhase1     = "▶ 執行 Phase1: %s",
+		logRunFailed     = "❌ 執行失敗: %s",
 		logCopyOk        = "✅ 腳本已複製到剪貼板！",
 		logCopyConsole   = "⚠️ 腳本已輸出到控制台（F9查看）",
 		logInvalidName   = "⚠️ 請輸入有效的腳本名稱",
@@ -126,7 +138,8 @@ local Lang = {
 		logModAdd        = "效果套用: %s",
 		logModRemove     = "效果移除: %s，當前: %s",
 		logWaitReady     = "⏳ 等待 Ready...",
-		logFlow          = "📋 流程：Ready → 選擇難易度 → 自動開始計時",
+		logFlow          = "📋 流程：Moon = Ready 後開始；其他地圖 = Ready → 難易度 → 開始",
+		logSpecialMapReady = "🗺️ 檢測到特殊地圖 [%s]，Ready 後開始計時",
 		logGameEnd       = "🏁 遊戲結束  總時間: %dm %ds (%.1fs)",
 		logStarted       = "🎉 追蹤系統已啟動！地圖: %s  難易度: %s  效果: %s",
 		logInitFailed    = "❌ 追蹤系統初始化失敗（可能不在遊戲中）",
@@ -139,12 +152,21 @@ local Lang = {
 		logAbility       = "塔能力 #%d %s: %s  +%.1fs",
 		logAbilityUnknown= "塔能力 [id:%s] %s (未追蹤)  +%.1fs",
 		logTowerItem     = "  #%d %s [id=%s] +%.1fs",
+		-- 塔能力面板
+		abilityFmt       = "能力: %s / 冷卻: %ds",
+		abilityReady     = "🟢 就緒",
+		abilityTimerFmt  = "⏳ %.0fs",
+		abilityAutoLabel = "自動",
+		abilityFireFmt   = "⚡ %s",
+		abilityWaitId    = "⏳ 等待 ID",
+		abilityNoTowers  = "尚無擁有能力的塔",
 	},
 	en = {
 		titleMain        = "Noob Tower | Tracker",
 		titleParam       = "  ⚙️ Parameters",
 		titleSave        = "  💾 Save Script",
 		titleManage      = "  📁 Script Manager",
+		titleAbility     = "  ⚡ Tower Abilities",
 		btnCopy          = "📋 Copy",
 		btnCopied        = "✅ Copied",
 		btnSave          = "💾 Save",
@@ -152,6 +174,7 @@ local Lang = {
 		btnRefresh       = "🔄 Refresh",
 		btnReset         = "🔄 Reset",
 		btnDebug         = "🔍 Tower List",
+		btnAbility       = "⚡ Ability",
 		btnConfirmSave   = "✅ Confirm",
 		btnCancel        = "❌ Cancel",
 		toggleOn         = "ON",
@@ -167,12 +190,18 @@ local Lang = {
 		lblFileName      = "Script name:",
 		phFileName       = "Enter script name...",
 		infoFmt          = "Map: %s\nDifficulty: %s\nModifier: %s",
+		lblSaveMode      = "Save Mode",
+		saveMerged       = "Merged",
+		saveSeparate     = "Separate",
 		logNoOps         = "⚠️ No operations recorded",
 		logSaved         = "✅ Saved: %s",
+		logSavedPhase2   = "✅ Saved Phase2: %s",
 		logSaveFailed    = "❌ Save failed: %s",
 		logNoScripts     = "No saved scripts",
 		logCopied        = "📋 Copied: %s",
 		logDeleted       = "🗑️ Deleted: %s",
+		logRunPhase1     = "▶ Run Phase1: %s",
+		logRunFailed     = "❌ Run failed: %s",
 		logCopyOk        = "✅ Script copied to clipboard!",
 		logCopyConsole   = "⚠️ Script printed to console (F9)",
 		logInvalidName   = "⚠️ Please enter a valid script name",
@@ -187,7 +216,8 @@ local Lang = {
 		logModAdd        = "Modifier added: %s",
 		logModRemove     = "Modifier removed: %s, current: %s",
 		logWaitReady     = "⏳ Waiting for Ready...",
-		logFlow          = "📋 Flow: Ready → Select difficulty → Timer starts",
+		logFlow          = "📋 Flow: Moon = Ready starts timer; other maps = Ready → Difficulty → Timer",
+		logSpecialMapReady = "🗺️ Special map detected [%s], timer starts after Ready",
 		logGameEnd       = "🏁 Game ended  Total: %dm %ds (%.1fs)",
 		logStarted       = "🎉 Tracker started! Map: %s  Difficulty: %s  Modifier: %s",
 		logInitFailed    = "❌ Tracker init failed (not in game?)",
@@ -200,6 +230,14 @@ local Lang = {
 		logAbility       = "Ability #%d %s: %s  +%.1fs",
 		logAbilityUnknown= "Ability [id:%s] %s (untracked)  +%.1fs",
 		logTowerItem     = "  #%d %s [id=%s] +%.1fs",
+		-- 塔能力面板
+		abilityFmt       = "Ability: %s / Cooldown: %ds",
+		abilityReady     = "🟢 Ready",
+		abilityTimerFmt  = "⏳ %.0fs",
+		abilityAutoLabel = "Auto",
+		abilityFireFmt   = "⚡ %s",
+		abilityWaitId    = "⏳ Waiting ID",
+		abilityNoTowers  = "No towers with abilities",
 	}
 }
 
@@ -245,17 +283,17 @@ local GameRunningValue   = nil
 local TowerAbilityRemote = nil
 
 local nextOrder    = 1
-local orderToInfo  = {}   -- order -> { order, name, id, position, time }
-local idToOrder    = {}   -- gameId(number) -> order
-local upgradeLog   = {}   -- { gameId, order, time }
-local sellLog      = {}   -- { gameId, order, wave, waveTime }
-local skipWaveLog  = {}   -- { time }
-local speedChangeLog = {} -- { speed, time }
-local abilityLog   = {}   -- { gameId, order, abilityName, elapsed }
+local orderToInfo  = {}
+local idToOrder    = {}
+local upgradeLog   = {}
+local sellLog      = {}
+local skipWaveLog  = {}
+local speedChangeLog = {}
+local abilityLog   = {}
 local lastDetectedSpeed = 1
 
 local DEBUG_MODE = false
-local towerUUIDData = {}  -- uuid -> { towerType, mutations }
+local towerUUIDData = {}
 
 local function getMutLabel(uuid)
 	local pdata = uuid and towerUUIDData[uuid]
@@ -275,9 +313,37 @@ local function getMutLabel(uuid)
 end
 
 -- === 遊戲狀態追蹤 ===
-local isGameRunning = false
-local gameStartTime = nil
+local isGameRunning  = false
+local gameStartTime  = nil
 local gameEndElapsed = nil
+local gameStartMapId = nil
+local mapTransitionLog = {}
+local readyHooked = false
+local hookTaskQueue = {}
+
+local function startGameTimer(mapId)
+	if isGameRunning then return false end
+	gameStartTime  = tick()
+	isGameRunning  = true
+	gameStartMapId = mapId or gameSettings.mapId
+	return true
+end
+
+local function queueHookTask(fn)
+	table.insert(hookTaskQueue, fn)
+end
+
+local function flushHookTaskQueue()
+	if #hookTaskQueue == 0 then return end
+	local queued = hookTaskQueue
+	hookTaskQueue = {}
+	for _, fn in ipairs(queued) do
+		local ok, err = pcall(fn)
+		if not ok then
+			warn("[Queued Hook Error]", err)
+		end
+	end
+end
 
 -- === 腳本生成設定 ===
 local timeRoundUp          = false
@@ -295,14 +361,129 @@ local function getElapsed()
 end
 
 -- ============================================================
+-- 塔能力系統 狀態
+-- ============================================================
+local TowerAbilitiesData = {}
+local TowersData = {}
+
+local ABILITY_FALLBACK = {
+	Heal              = { Name = "Heal",           Cooldown = 15 },
+	Rage              = { Name = "Rage",           Cooldown = 30 },
+	Spin              = { Name = "Spin",           Cooldown = 45 },
+	NoxGrenade        = { Name = "Poison Grenade", Cooldown = 35 },
+	PaintballerGrenade= { Name = "Paint Grenade",  Cooldown = 40 },
+	KingBoost         = { Name = "Conquer",        Cooldown = 30 },
+	DoombringerHammer = { Name = "Hammer Stun",    Cooldown = 30 },
+}
+
+local function getAbiData(key)
+	return TowerAbilitiesData[key] or ABILITY_FALLBACK[key] or { Name = key, Cooldown = 30 }
+end
+
+local abilityCache = {}
+local function fetchAbilityKeys(towerName)
+	if abilityCache[towerName] then return abilityCache[towerName] end
+	local keys = {}
+	local seen = {}
+	local td = type(TowersData.getTowerData) == "function" and TowersData.getTowerData(towerName)
+	if type(td) == "table" then
+		if type(td.Levels) == "table" then
+			for _, levelData in pairs(td.Levels) do
+				local stats = type(levelData) == "table" and levelData.Stats
+				if stats and type(stats.Ability) == "table" then
+					for _, k in pairs(stats.Ability) do
+						if type(k) == "string" and not seen[k] then
+							seen[k] = true
+							table.insert(keys, k)
+						end
+					end
+				end
+			end
+		end
+		if type(td.Stats) == "table" and type(td.Stats.Ability) == "table" then
+			for _, k in pairs(td.Stats.Ability) do
+				if type(k) == "string" and not seen[k] then
+					seen[k] = true
+					table.insert(keys, k)
+				end
+			end
+		end
+	end
+	abilityCache[towerName] = keys
+	return keys
+end
+
+local towersWithAbility = {} -- { [towerName] = abilityKeys[] }
+
+local abiNextOrder         = 1
+local abiLiveTowers        = {} -- [model] = { name, order, abilityKeys, gameId, cooldowns, savedAutoStates }
+local abiTowerCards        = {} -- [model] = { container, widgets[] }
+local abiModelByGameId     = {} -- [gameId] = model
+local abiPendingGameIds    = {} -- { name, gameId, time }[]
+local abiGameIdCooldownHint= {} -- [gameId][abilityKey] = tick()
+local abiEmptyLabel        = nil -- 「尚無能力塔」提示標籤
+local abiRemoteInFlight    = {} -- [gameId:abilityKey] = true
+
+local function getAbilityRemaining(info, abilityKey, cooldown)
+	local t0 = info and info.cooldowns and info.cooldowns[abilityKey]
+	if not t0 then return 0 end
+	return math.max(0, cooldown - (tick() - t0))
+end
+
+local function invokeTowerAbilitySafely(model, abilityKey, cooldown)
+	if not isGameRunning or not TowerAbilityRemote then return false end
+
+	local info = abiLiveTowers[model]
+	if not info or not info.gameId then return false end
+	if getAbilityRemaining(info, abilityKey, cooldown) > 0 then return false end
+
+	local invokeKey = tostring(info.gameId) .. ":" .. tostring(abilityKey)
+	if abiRemoteInFlight[invokeKey] then return false end
+
+	local gid = info.gameId
+	abiRemoteInFlight[invokeKey] = true
+	info.cooldowns[abilityKey] = tick()
+
+	task.spawn(function()
+		local ok, res = pcall(function()
+			return TowerAbilityRemote:InvokeServer(tostring(gid), abilityKey)
+		end)
+		abiRemoteInFlight[invokeKey] = nil
+
+		if not ok or res == false then
+			-- Keep the local cooldown after rejection to avoid rapid remote retries.
+			return
+		end
+	end)
+
+	return true
+end
+
+local function stopAbilityRemoteTriggers()
+	abiRemoteInFlight = {}
+	abiPendingGameIds = {}
+	abiGameIdCooldownHint = {}
+	abiModelByGameId = {}
+
+	for _, info in pairs(abiLiveTowers) do
+		info.gameId = nil
+		info.cooldowns = {}
+	end
+
+	if rebuildAllAbilityCards then
+		rebuildAllAbilityCards()
+	end
+end
+
+-- ============================================================
 -- UI 建立
 -- ============================================================
+local fn = get_hidden_gui or gethui;
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "NTDTrackerUI"
 screenGui.IgnoreGuiInset = true
 screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
-
+screenGui.Parent = fn and fn() or game:GetService("CoreGui")
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UISizes.mainFrame
 mainFrame.Position = UDim2.new(0.2, 0, 0.2, 0)
@@ -313,16 +494,8 @@ mainFrame.BorderSizePixel = 0
 mainFrame.ClipsDescendants = true
 mainFrame.Parent = screenGui
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = Theme.CornerRadius
-corner.Parent = mainFrame
-
-local shadow = Instance.new("UIStroke")
-shadow.Thickness = 1.5
-shadow.Color = Theme.Border
-shadow.Transparency = 0.2
-shadow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-shadow.Parent = mainFrame
+do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = mainFrame end
+do local s = Instance.new("UIStroke"); s.Thickness = 1.5; s.Color = Theme.Border; s.Transparency = 0.2; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = mainFrame end
 
 -- 標題欄
 local titleBar = Instance.new("Frame")
@@ -331,10 +504,7 @@ titleBar.BackgroundColor3 = Theme.Surface
 titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
 titleBar.Name = "TitleBar"
-
-local titleCorner = Instance.new("UICorner")
-titleCorner.CornerRadius = Theme.CornerRadius
-titleCorner.Parent = titleBar
+do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = titleBar end
 
 local titleBarCover = Instance.new("Frame")
 titleBarCover.Size = UDim2.new(1, 0, 0, 10)
@@ -374,14 +544,11 @@ langBtn.Parent = titleBar
 do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = langBtn end
 
 langBtn.MouseButton1Click:Connect(function()
-	if currentLang == "zh" then
-		currentLang = "en"
-		langBtn.Text = "中"
-	else
-		currentLang = "zh"
-		langBtn.Text = "EN"
-	end
+	if currentLang == "zh" then currentLang = "en"; langBtn.Text = "中"
+	else currentLang = "zh"; langBtn.Text = "EN" end
 	updateI18n()
+	-- 重建能力面板卡片以更新語言
+	task.spawn(function() rebuildAllAbilityCards() end)
 end)
 
 local minimizeBtn = Instance.new("TextButton")
@@ -454,9 +621,10 @@ local function makeBtn(textKey, bgColor, txtColor, order, widthScale)
 	return btn
 end
 
-local copyBtn   = makeBtn("btnCopy",  Theme.Success,          Theme.TextDark, 1, 0.34)
-local saveBtn   = makeBtn("btnSave",  Theme.Accent,           Theme.Text,     2, 0.34)
-local Parameter = makeBtn("btnParam", Theme.SurfaceHighlight, Theme.Text,     3, 0.32)
+local copyBtn   = makeBtn("btnCopy",    Theme.Success,          Theme.TextDark, 1, 0.25)
+local saveBtn   = makeBtn("btnSave",    Theme.Accent,           Theme.Text,     2, 0.25)
+local Parameter = makeBtn("btnParam",   Theme.SurfaceHighlight, Theme.Text,     3, 0.25)
+local abilityBtn= makeBtn("btnAbility", Theme.Purple,           Theme.Text,     4, 0.25)
 
 local resetBtn
 local debugBtn
@@ -628,6 +796,66 @@ fileNameInput.Parent = saveFrame
 do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = fileNameInput end
 bindText(fileNameInput, "phFileName", "PlaceholderText")
 
+local saveModeRow = Instance.new("Frame")
+saveModeRow.Size = UDim2.new(1, -20, 0, 28)
+saveModeRow.Position = UDim2.new(0, 10, 0, 122)
+saveModeRow.BackgroundTransparency = 1
+saveModeRow.Visible = false
+saveModeRow.ZIndex = 12
+saveModeRow.Parent = saveFrame
+
+local saveModeLbl = Instance.new("TextLabel")
+saveModeLbl.Size = UDim2.new(0.45, 0, 1, 0)
+saveModeLbl.BackgroundTransparency = 1
+saveModeLbl.TextColor3 = Theme.TextDim
+saveModeLbl.Font = Theme.Font
+saveModeLbl.TextSize = Theme.SizeNormal
+saveModeLbl.TextXAlignment = Enum.TextXAlignment.Left
+saveModeLbl.ZIndex = 13
+saveModeLbl.Parent = saveModeRow
+bindText(saveModeLbl, "lblSaveMode")
+
+local saveMergedBtn = Instance.new("TextButton")
+saveMergedBtn.Size = UDim2.new(0.25, -4, 1, 0)
+saveMergedBtn.Position = UDim2.new(0.45, 0, 0, 0)
+saveMergedBtn.BackgroundColor3 = Theme.Accent
+saveMergedBtn.TextColor3 = Theme.Text
+saveMergedBtn.Font = Theme.FontBold
+saveMergedBtn.TextSize = 14
+saveMergedBtn.BorderSizePixel = 0
+saveMergedBtn.ZIndex = 13
+saveMergedBtn.Parent = saveModeRow
+do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,6); c.Parent = saveMergedBtn end
+bindText(saveMergedBtn, "saveMerged")
+
+local saveSeparateBtn = Instance.new("TextButton")
+saveSeparateBtn.Size = UDim2.new(0.28, -4, 1, 0)
+saveSeparateBtn.Position = UDim2.new(0.72, 0, 0, 0)
+saveSeparateBtn.BackgroundColor3 = Theme.SurfaceHighlight
+saveSeparateBtn.TextColor3 = Theme.TextDim
+saveSeparateBtn.Font = Theme.FontBold
+saveSeparateBtn.TextSize = 14
+saveSeparateBtn.BorderSizePixel = 0
+saveSeparateBtn.ZIndex = 13
+saveSeparateBtn.Parent = saveModeRow
+do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,6); c.Parent = saveSeparateBtn end
+bindText(saveSeparateBtn, "saveSeparate")
+
+local currentSaveMode = "merged"
+
+local function updateSaveModeButtons()
+	if currentSaveMode == "merged" then
+		saveMergedBtn.BackgroundColor3 = Theme.Accent; saveMergedBtn.TextColor3 = Theme.Text
+		saveSeparateBtn.BackgroundColor3 = Theme.SurfaceHighlight; saveSeparateBtn.TextColor3 = Theme.TextDim
+	else
+		saveMergedBtn.BackgroundColor3 = Theme.SurfaceHighlight; saveMergedBtn.TextColor3 = Theme.TextDim
+		saveSeparateBtn.BackgroundColor3 = Theme.Accent; saveSeparateBtn.TextColor3 = Theme.Text
+	end
+end
+
+saveMergedBtn.MouseButton1Click:Connect(function() currentSaveMode = "merged"; updateSaveModeButtons() end)
+saveSeparateBtn.MouseButton1Click:Connect(function() currentSaveMode = "separate"; updateSaveModeButtons() end)
+
 local saveBtnContainer = Instance.new("Frame")
 saveBtnContainer.Size = UDim2.new(1, -20, 0, 40)
 saveBtnContainer.Position = UDim2.new(0, 10, 0, 130)
@@ -665,7 +893,7 @@ bindText(cancelSaveBtn, "btnCancel")
 -- ============================================================
 -- 腳本管理面板
 -- ============================================================
-local refreshScriptList  -- 前向宣告
+local refreshScriptList
 
 local manageFrame = Instance.new("Frame")
 manageFrame.Size = UISizes.manageFrame
@@ -743,6 +971,75 @@ manageListLayout.Parent = manageScrollFrame
 
 manageListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 	manageScrollFrame.CanvasSize = UDim2.new(0, 0, 0, manageListLayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- ============================================================
+-- 塔能力面板 UI
+-- ============================================================
+local abilityFrame = Instance.new("Frame")
+abilityFrame.Size = UISizes.abilityFrame
+abilityFrame.Position = UDim2.new(0.5, 0, 0.5, -200)
+abilityFrame.BackgroundColor3 = Theme.Background
+abilityFrame.BackgroundTransparency = 0.05
+abilityFrame.Active = true
+abilityFrame.BorderSizePixel = 0
+abilityFrame.ClipsDescendants = true
+abilityFrame.Visible = false
+abilityFrame.ZIndex = 10
+abilityFrame.Parent = screenGui
+do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = abilityFrame end
+do local s = Instance.new("UIStroke"); s.Thickness = 1.5; s.Color = Theme.Border; s.Transparency = 0.2; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = abilityFrame end
+
+local abilityTitleBar = Instance.new("Frame")
+abilityTitleBar.Size = UDim2.new(1, 0, 0, 45)
+abilityTitleBar.BackgroundColor3 = Theme.Surface
+abilityTitleBar.BorderSizePixel = 0
+abilityTitleBar.ZIndex = 11
+abilityTitleBar.Parent = abilityFrame
+do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = abilityTitleBar end
+do local f = Instance.new("Frame"); f.Size = UDim2.new(1,0,0,10); f.Position = UDim2.new(0,0,1,-10); f.BackgroundColor3 = Theme.Surface; f.BorderSizePixel = 0; f.ZIndex = 11; f.Parent = abilityTitleBar end
+
+local abilityTitle = Instance.new("TextLabel")
+abilityTitle.Size = UDim2.new(0.8, 0, 1, 0)
+abilityTitle.BackgroundTransparency = 1
+abilityTitle.TextColor3 = Theme.Purple
+abilityTitle.Font = Theme.FontBold
+abilityTitle.TextSize = Theme.SizeLarge
+abilityTitle.TextXAlignment = Enum.TextXAlignment.Left
+abilityTitle.ZIndex = 12
+abilityTitle.Parent = abilityTitleBar
+bindText(abilityTitle, "titleAbility")
+
+local abilityCloseBtn = Instance.new("TextButton")
+abilityCloseBtn.Size = UDim2.new(0, 35, 0, 35)
+abilityCloseBtn.Position = UDim2.new(1, -40, 0, 5)
+abilityCloseBtn.Text = "×"
+abilityCloseBtn.BackgroundColor3 = Theme.Error
+abilityCloseBtn.TextColor3 = Theme.Text
+abilityCloseBtn.Font = Theme.FontBold
+abilityCloseBtn.TextSize = 24
+abilityCloseBtn.BorderSizePixel = 0
+abilityCloseBtn.ZIndex = 12
+abilityCloseBtn.Parent = abilityTitleBar
+do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Parent = abilityCloseBtn end
+
+local abilityScrollFrame = Instance.new("ScrollingFrame")
+abilityScrollFrame.Size = UDim2.new(1, -20, 1, -55)
+abilityScrollFrame.Position = UDim2.new(0, 10, 0, 50)
+abilityScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+abilityScrollFrame.ScrollBarThickness = 4
+abilityScrollFrame.BackgroundTransparency = 1
+abilityScrollFrame.ScrollBarImageColor3 = Theme.Border
+abilityScrollFrame.ZIndex = 11
+abilityScrollFrame.Parent = abilityFrame
+
+local abilityListLayout = Instance.new("UIListLayout")
+abilityListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+abilityListLayout.Padding = UDim.new(0, 8)
+abilityListLayout.Parent = abilityScrollFrame
+
+abilityListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	abilityScrollFrame.CanvasSize = UDim2.new(0, 0, 0, abilityListLayout.AbsoluteContentSize.Y + 10)
 end)
 
 -- ============================================================
@@ -826,7 +1123,6 @@ local function createToggle(labelKey, parent, order, defaultValue, callback, des
 	return btn
 end
 
-
 -- ============================================================
 -- 參數面板控件
 -- ============================================================
@@ -886,18 +1182,14 @@ do local c = Instance.new("UICorner"); c.CornerRadius = Theme.CornerRadius; c.Pa
 bindText(debugBtn, "btnDebug")
 
 createLabel("lblScriptParam", paramScrollFrame, 13)
-createToggle("lblAutoReplay", paramScrollFrame, 14, ScriptSettings.AutoReplay, function(v)
-	ScriptSettings.AutoReplay = v
-end)
-createToggle("lblRecordMutation", paramScrollFrame, 15, ScriptSettings.RecordSpecialMutation, function(v)
-	ScriptSettings.RecordSpecialMutation = v
-end, "lblRecordMutationDesc")
+createToggle("lblAutoReplay", paramScrollFrame, 14, ScriptSettings.AutoReplay, function(v) ScriptSettings.AutoReplay = v end)
+createToggle("lblRecordMutation", paramScrollFrame, 15, ScriptSettings.RecordSpecialMutation, function(v) ScriptSettings.RecordSpecialMutation = v end, "lblRecordMutationDesc")
 
 -- ============================================================
 -- 拖移功能
 -- ============================================================
 local function makeDraggable(uiElement)
-	local state = { dragging = false, dragStart = nil, startPos = nil, isLocked = false }
+	local state = { dragging = false, dragStart = nil, startPos = nil }
 	local renderConn = nil
 
 	local function update()
@@ -909,7 +1201,6 @@ local function makeDraggable(uiElement)
 	end
 
 	uiElement.InputBegan:Connect(function(input)
-		if state.isLocked then return end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			state.dragging = true
 			state.dragStart = UserInputService:GetMouseLocation()
@@ -929,6 +1220,7 @@ end
 makeDraggable(parameterFrame)
 makeDraggable(saveFrame)
 makeDraggable(manageFrame)
+makeDraggable(abilityFrame)
 
 local tbDrag = { dragging = false }
 local tbConn = nil
@@ -964,8 +1256,9 @@ local function toggleMinimize()
 	copyBtn.Visible       = not minimized
 	saveBtn.Visible       = not minimized
 	Parameter.Visible     = not minimized
+	abilityBtn.Visible    = not minimized
 	minimizeBtn.Text      = minimized and "+" or "—"
-	game:GetService("TweenService"):Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+	TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
 		Size = minimized and UISizes.mainFrameMinimized or UISizes.mainFrameExpanded
 	}):Play()
 end
@@ -978,21 +1271,56 @@ local function closeAllPanels()
 	parameterFrame.Visible = false
 	saveFrame.Visible      = false
 	manageFrame.Visible    = false
+	abilityFrame.Visible   = false
+end
+
+local function closeBlockingPanels()
+	saveFrame.Visible   = false
+	manageFrame.Visible = false
 end
 
 local function openSavePanel()
 	closeAllPanels()
 	local defaultName = string.format("%s_%s_%s",
-		gameSettings.mapId or "Map",
+		gameStartMapId or gameSettings.mapId or "Map",
 		gameSettings.difficulty or "Diff",
 		os.date("%Y%m%d_%H%M%S"))
 	defaultName = defaultName:gsub("[^%w_%-]", "_")
 	fileNameInput.Text = defaultName
+
+	local hasTransition = mapTransitionLog[1] ~= nil
+	saveModeRow.Visible = hasTransition
+	if hasTransition then
+		saveBtnContainer.Position = UDim2.new(0, 10, 0, 160)
+	else
+		currentSaveMode = "merged"
+		updateSaveModeButtons()
+		saveBtnContainer.Position = UDim2.new(0, 10, 0, 130)
+	end
+
 	saveFrame.Visible = true
 end
 
+-- 定位能力面板到參數面板右邊
+local function positionAbilityFrame()
+	if parameterFrame.Visible then
+		abilityFrame.Position = UDim2.new(
+			parameterFrame.Position.X.Scale,
+			parameterFrame.Position.X.Offset + parameterFrame.AbsoluteSize.X + 10,
+			parameterFrame.Position.Y.Scale,
+			parameterFrame.Position.Y.Offset)
+	else
+		-- 參數面板不可見時，定位到 mainFrame 右邊
+		abilityFrame.Position = UDim2.new(
+			mainFrame.Position.X.Scale,
+			mainFrame.Position.X.Offset + mainFrame.AbsoluteSize.X + 10,
+			mainFrame.Position.Y.Scale,
+			mainFrame.Position.Y.Offset)
+	end
+end
+
 -- ============================================================
--- 檔案 I/O
+-- 檔案
 -- ============================================================
 local function listScripts()
 	local scripts = {}
@@ -1013,10 +1341,10 @@ end
 local function saveScriptToFile(fileName, content)
 	local fullPath = SCRIPT_SAVE_PATH .. "/" .. fileName .. ".lua"
 	local ok, err = pcall(function()
-		if writefile then writefile(fullPath, content) else error("writefile 不可用") end
+		if writefile then writefile(fullPath, content) else error("writefile unavailable") end
 	end)
 	if ok then addLog(T("logSaved"):format(fileName), Theme.Success); return true, fullPath
-	else  addLog(T("logSaveFailed"):format(tostring(err)), Theme.Error); return false, err end
+	else addLog(T("logSaveFailed"):format(tostring(err)), Theme.Error); return false, err end
 end
 
 function refreshScriptList()
@@ -1048,7 +1376,7 @@ function refreshScriptList()
 		do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,6); c.Parent = item end
 
 		local nl = Instance.new("TextLabel")
-		nl.Size = UDim2.new(1,-100,1,0)
+		nl.Size = UDim2.new(1,-140,1,0)
 		nl.Position = UDim2.new(0,10,0,0)
 		nl.BackgroundTransparency = 1
 		nl.Text = script.name
@@ -1059,6 +1387,13 @@ function refreshScriptList()
 		nl.TextTruncate = Enum.TextTruncate.AtEnd
 		nl.ZIndex = 13
 		nl.Parent = item
+
+		local runBtn = Instance.new("TextButton")
+		runBtn.Size = UDim2.new(0,35,0,30); runBtn.Position = UDim2.new(1,-130,0,7)
+		runBtn.Text = "▶"; runBtn.BackgroundColor3 = Theme.Success; runBtn.TextColor3 = Theme.TextDark
+		runBtn.Font = Theme.FontBold; runBtn.TextSize = 16; runBtn.BorderSizePixel = 0
+		runBtn.ZIndex = 13; runBtn.Parent = item
+		do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,6); c.Parent = runBtn end
 
 		local cpBtn = Instance.new("TextButton")
 		cpBtn.Size = UDim2.new(0,35,0,30); cpBtn.Position = UDim2.new(1,-90,0,7)
@@ -1075,31 +1410,145 @@ function refreshScriptList()
 		do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,6); c.Parent = dlBtn end
 
 		local fp = script.path
+		local sname = script.name
+
+		runBtn.MouseButton1Click:Connect(function()
+			local ok2, content = pcall(function() return readfile and readfile(fp) or nil end)
+			if not ok2 or not content or content == "" then
+				addLog(T("logRunFailed"):format(sname), Theme.Error); return
+			end
+			local fn, err = loadstring(content)
+			if not fn then addLog(T("logRunFailed"):format(tostring(err)), Theme.Error); return end
+			addLog(T("logRunPhase1"):format(sname), Theme.Success)
+			manageFrame.Visible = false
+			task.spawn(fn)
+		end)
 		cpBtn.MouseButton1Click:Connect(function()
-			local content = pcall(function() if readfile then return readfile(fp) end end)
-			if content then
+			local ok2, content = pcall(function() return readfile and readfile(fp) or nil end)
+			if ok2 and content then
 				pcall(function() setclipboard(content) end)
-				addLog(T("logCopied"):format(script.name), Theme.Accent)
+				addLog(T("logCopied"):format(sname), Theme.Accent)
 			end
 		end)
 		dlBtn.MouseButton1Click:Connect(function()
 			pcall(function() if delfile then delfile(fp) end end)
-			addLog(T("logDeleted"):format(script.name), Theme.Warning)
+			addLog(T("logDeleted"):format(sname), Theme.Warning)
 			refreshScriptList()
 		end)
 	end
 end
 
 -- ============================================================
--- 生成腳本
+-- 生成腳本 (writeOp / buildOperations / generatePhase2Script / generateScript)
 -- ============================================================
-local function generateScript()
+local function writeOp(lines, op)
+	local rawE = op.elapsed or 0
+	local e = timeRoundUp and (math.ceil(rawE * 10) / 10) or (math.floor(rawE * 10) / 10)
+	if op.type == "place" then
+		local info = op.info
+		local x = info.Position and info.Position.X or 0
+		local y = info.Position and info.Position.Y or 0
+		local z = info.Position and info.Position.Z or 0
+		local pdata = info.UUID and towerUUIDData[info.UUID]
+		local condArg = (pdata and pdata.mutations and pdata.mutations["Shiny"] == true) and ', "Shiny"' or ""
+		table.insert(lines, string.format(
+			'\tNTD.AddPlaceTower("%s", %.3f, %.3f, %.3f, 0, %.1f%s) -- #%d +%.1fs',
+			info.UnitType, x, y, z, e, condArg, info.Index, e))
+	elseif op.type == "upgrade" then
+		if op.order then
+			table.insert(lines, string.format("\tNTD.AddUpgradeTower(%d, %.1f) -- #%d +%.1fs", op.order, e, op.order, e))
+		else
+			table.insert(lines, string.format("\t-- WARN: upgrade untracked tower [ID:%s] +%.1fs", tostring(op.gameId), e))
+		end
+	elseif op.type == "sell" then
+		if op.order then
+			table.insert(lines, string.format("\tNTD.AddSellTower(%d, %.1f) -- #%d +%.1fs", op.order, e, op.order, e))
+		else
+			table.insert(lines, string.format("\t-- WARN: sell untracked tower [ID:%s] +%.1fs", tostring(op.gameId), e))
+		end
+	elseif op.type == "skipwave" then
+		table.insert(lines, string.format("\tNTD.AddSkipWave(%.1f) -- +%.1fs", e, e))
+	elseif op.type == "speed" then
+		table.insert(lines, string.format("\tNTD.AddSetSpeed(%d, %.1f) -- Speed %dx +%.1fs", op.speed, e, op.speed, e))
+	elseif op.type == "towerability" then
+		if op.order then
+			table.insert(lines, string.format('\tNTD.AddTowerAbility(%d, "%s", %.1f) -- #%d +%.1fs', op.order, op.abilityName, e, op.order, e))
+		else
+			table.insert(lines, string.format('\t-- WARN: towerability untracked tower [ID:%s] %s +%.1fs', tostring(op.gameId), op.abilityName, e))
+		end
+	end
+end
+
+local function buildOperations()
+	local operations = {}
+	for order = 1, nextOrder - 1 do
+		local info = orderToInfo[order]
+		if info then table.insert(operations, { type = "place", order = order, elapsed = info.Elapsed or 0, info = info }) end
+	end
+	for _, up in ipairs(upgradeLog) do
+		table.insert(operations, { type = "upgrade", order = up.order, elapsed = up.elapsed or 0, gameId = up.gameId })
+	end
+	for _, sl in ipairs(sellLog) do
+		table.insert(operations, { type = "sell", order = sl.order, elapsed = sl.elapsed or 0, gameId = sl.gameId })
+	end
+	for _, sk in ipairs(skipWaveLog) do
+		table.insert(operations, { type = "skipwave", elapsed = sk.elapsed or 0 })
+	end
+	for _, sp in ipairs(speedChangeLog) do
+		table.insert(operations, { type = "speed", speed = sp.speed, elapsed = sp.elapsed or 0 })
+	end
+	for _, ab in ipairs(abilityLog) do
+		table.insert(operations, { type = "towerability", order = ab.order, elapsed = ab.elapsed or 0, gameId = ab.gameId, abilityName = ab.abilityName })
+	end
+	table.sort(operations, function(a, b) return a.elapsed < b.elapsed end)
+	return operations
+end
+
+local function generatePhase2Script()
+	local transition = mapTransitionLog[1]
+	if not transition then return nil end
+	local operations = buildOperations()
+	local lines = {}
+	table.insert(lines, "--[[")
+	table.insert(lines, "")
+	table.insert(lines, string.format("Phase 2: %s → %s  |  Difficulty: %s", transition.fromMap, transition.toMap, gameSettings.difficulty))
+	if gameEndElapsed then
+		local p2e = gameEndElapsed - transition.elapsed
+		table.insert(lines, string.format("Phase2 time: %dm %ds (%.1fs)", math.floor(p2e / 60), math.floor(p2e % 60), p2e))
+	end
+	table.insert(lines, "")
+	table.insert(lines, "]]")
+	table.insert(lines, "")
+	table.insert(lines, "local NTD = getgenv().NTD")
+	table.insert(lines, "if not NTD then")
+	table.insert(lines, string.format('    loadstring(game:HttpGet("%s"))()', NTD_API_URL))
+	table.insert(lines, "    NTD = getgenv().NTD")
+	table.insert(lines, "end")
+	table.insert(lines, "")
+	table.insert(lines, string.format("-- ===== Phase 2: %s (elapsed from map transition) =====", transition.toMap))
+	for _, op in ipairs(operations) do
+		if op.elapsed >= transition.elapsed then
+			local opCopy = {}
+			for k, v in pairs(op) do opCopy[k] = v end
+			opCopy.elapsed = op.elapsed - transition.elapsed
+			writeOp(lines, opCopy)
+		end
+	end
+	table.insert(lines, "")
+	if gameEndElapsed then
+		local p2e = gameEndElapsed - transition.elapsed
+		local e = timeRoundUp and (math.ceil(p2e * 10) / 10) or (math.floor(p2e * 10) / 10)
+		table.insert(lines, string.format("\tNTD.AddEnd(%.1f) -- Time %02d:%02d", e, math.floor(e / 60), math.floor(e % 60)))
+	end
+	table.insert(lines, "\tNTD.ExecuteQueue()")
+	return table.concat(lines, "\n")
+end
+
+local function generateScript(mode)
 	if nextOrder <= 1 and #upgradeLog == 0 and #skipWaveLog == 0 then
-		addLog(T("logNoOps"), Theme.Warning)
-		return nil
+		addLog(T("logNoOps"), Theme.Warning); return nil
 	end
 
-	-- usedTowers: { name, uuid } per unique (towerType + mutation signature)
 	local usedTowers   = {}
 	local seenTowerKey = {}
 	for order = 1, nextOrder - 1 do
@@ -1126,68 +1575,17 @@ local function generateScript()
 		end
 	end
 
-	local operations = {}
-	for order = 1, nextOrder - 1 do
-		local info = orderToInfo[order]
-		if info then
-			table.insert(operations, {
-				type    = "place",
-				order   = order,
-				elapsed = info.Elapsed or 0,
-				info    = info,
-			})
-		end
-	end
-	for _, up in ipairs(upgradeLog) do
-		table.insert(operations, {
-			type    = "upgrade",
-			order   = up.order,
-			elapsed = up.elapsed or 0,
-			gameId  = up.gameId,
-		})
-	end
-	for _, sl in ipairs(sellLog) do
-		table.insert(operations, {
-			type    = "sell",
-			order   = sl.order,
-			elapsed = sl.elapsed or 0,
-			gameId  = sl.gameId,
-		})
-	end
-	for _, sk in ipairs(skipWaveLog) do
-		table.insert(operations, { type = "skipwave", elapsed = sk.elapsed or 0 })
-	end
-	for _, sp in ipairs(speedChangeLog) do
-		table.insert(operations, { type = "speed", speed = sp.speed, elapsed = sp.elapsed or 0 })
-	end
-	for _, ab in ipairs(abilityLog) do
-		table.insert(operations, {
-			type        = "towerability",
-			order       = ab.order,
-			elapsed     = ab.elapsed or 0,
-			gameId      = ab.gameId,
-			abilityName = ab.abilityName,
-		})
-	end
-	table.sort(operations, function(a, b)
-		return a.elapsed < b.elapsed
-	end)
+	local operations = buildOperations()
 
 	local fullLines = {}
-
 	table.insert(fullLines, "--[[")
 	table.insert(fullLines, "")
 	table.insert(fullLines, string.format("Map: %s  |  Difficulty: %s  |  Modifier: %s", gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier))
 	if gameEndElapsed then
-		local mins = math.floor(gameEndElapsed / 60)
-		local secs = math.floor(gameEndElapsed % 60)
-		table.insert(fullLines, string.format("Time: %dm %ds (%.1fs)", mins, secs, gameEndElapsed))
+		table.insert(fullLines, string.format("Time: %dm %ds (%.1fs)", math.floor(gameEndElapsed / 60), math.floor(gameEndElapsed % 60), gameEndElapsed))
 	end
 	table.insert(fullLines, "")
-	if customComment ~= "" then
-		table.insert(fullLines, customComment)
-		table.insert(fullLines, "")
-	end
+	if customComment ~= "" then table.insert(fullLines, customComment); table.insert(fullLines, "") end
 	if #usedTowers > 0 then
 		table.insert(fullLines, "Towers used:")
 		for _, entry in ipairs(usedTowers) do
@@ -1201,7 +1599,6 @@ local function generateScript()
 	end
 	table.insert(fullLines, "]]")
 	table.insert(fullLines, "")
-
 	table.insert(fullLines, "-- Load NTD API")
 	table.insert(fullLines, "local NTD = getgenv().NTD")
 	table.insert(fullLines, "if not NTD then")
@@ -1209,12 +1606,9 @@ local function generateScript()
 	table.insert(fullLines, "    NTD = getgenv().NTD")
 	table.insert(fullLines, "end")
 	table.insert(fullLines, "")
-
 	table.insert(fullLines, "-- ========== LOBBY ==========")
 	table.insert(fullLines, "if NTD.IsLobby() then")
-	if ScriptSettings.AutoReplay then
-		table.insert(fullLines, "\tNTD.AutoReplay(true)")
-	end
+	if ScriptSettings.AutoReplay then table.insert(fullLines, "\tNTD.AutoReplay(true)") end
 	if #usedTowers > 0 then
 		local towerList = {}
 		for _, entry in ipairs(usedTowers) do
@@ -1224,135 +1618,85 @@ local function generateScript()
 			if mutations then
 				for k, v in pairs(mutations) do
 					local isShiny = (k == "Shiny")
-					if isShiny or ScriptSettings.RecordSpecialMutation then
-						if v == true then
-							table.insert(mutStrings, string.format('"%s"', tostring(k)))
-						elseif type(v) == "string" and v ~= "" then
-							table.insert(mutStrings, string.format('"%s"', v))
-						end
+					if isShiny and ScriptSettings.RecordSpecialMutation then
+						if v == true then table.insert(mutStrings, string.format('"%s"', tostring(k)))
+						elseif type(v) == "string" and v ~= "" then table.insert(mutStrings, string.format('"%s"', v)) end
+					elseif isShiny then
+						table.insert(mutStrings, '"Shiny"')
 					end
 				end
 			end
-			if #mutStrings == 1 then
-				table.insert(towerList, string.format('{ "%s", %s }', entry.name, mutStrings[1]))
-			elseif #mutStrings > 1 then
-				table.insert(towerList, string.format('{ "%s", { %s } }', entry.name, table.concat(mutStrings, ", ")))
-			else
-				table.insert(towerList, string.format('"%s"', entry.name))
-			end
+			if #mutStrings == 1 then table.insert(towerList, string.format('{ "%s", %s }', entry.name, mutStrings[1]))
+			elseif #mutStrings > 1 then table.insert(towerList, string.format('{ "%s", { %s } }', entry.name, table.concat(mutStrings, ", ")))
+			else table.insert(towerList, string.format('"%s"', entry.name)) end
 		end
-		if #towerList == 1 then
-			table.insert(fullLines, string.format('\tNTD.EquipTower(%s)', towerList[1]))
+		if #towerList == 1 then table.insert(fullLines, string.format('\tNTD.EquipTower(%s)', towerList[1]))
 		else
 			table.insert(fullLines, '\tNTD.EquipTower({')
-			for _, t in ipairs(towerList) do
-				table.insert(fullLines, '\t\t' .. t .. ',')
-			end
+			for _, t in ipairs(towerList) do table.insert(fullLines, '\t\t' .. t .. ',') end
 			table.insert(fullLines, '\t})')
 		end
 	end
-	if gameSettings.mapId and gameSettings.mapId ~= "Unknown" then
-		local modesArg
-		if gameSettings.modifier ~= "None" and gameSettings.modifier ~= "" then
-			local modeNames = {}
-			for m in gameSettings.modifier:gmatch("[^,]+") do
-				table.insert(modeNames, '"' .. m:match("^%s*(.-)%s*$") .. '"')
-			end
-			if #modeNames == 1 then
-				modesArg = modeNames[1]
-			else
-				modesArg = "{ " .. table.concat(modeNames, ", ") .. " }"
-			end
-		elseif gameSettings.difficulty ~= "Unknown" then
-			modesArg = '"' .. gameSettings.difficulty .. '"'
+	local lobbyMapId = gameStartMapId or gameSettings.mapId
+	if lobbyMapId and lobbyMapId ~= "Unknown" then
+		if gameStartMapId == "Moon" then
+			table.insert(fullLines, '\tNTD.SelectMap("Moon")')
 		else
-			modesArg = '"Randomiser"'
+			local modesArg
+			if gameSettings.modifier ~= "None" and gameSettings.modifier ~= "" then
+				local modeNames = {}
+				for m in gameSettings.modifier:gmatch("[^,]+") do table.insert(modeNames, '"' .. m:match("^%s*(.-)%s*$") .. '"') end
+				modesArg = #modeNames == 1 and modeNames[1] or ("{ " .. table.concat(modeNames, ", ") .. " }")
+			elseif gameSettings.difficulty ~= "Unknown" then modesArg = '"' .. gameSettings.difficulty .. '"'
+			else modesArg = '"Randomiser"' end
+			table.insert(fullLines, string.format('\tNTD.SelectMap("%s", %s)', lobbyMapId, modesArg))
 		end
-		table.insert(fullLines, string.format('\tNTD.SelectMap("%s", %s)', gameSettings.mapId, modesArg))
 	else
 		table.insert(fullLines, '\tNTD.SelectMap("Plains") -- fill in map name')
 	end
 	table.insert(fullLines, "")
-
 	table.insert(fullLines, "-- ========== IN-GAME ==========")
 	table.insert(fullLines, "elseif NTD.IsInGame() then")
 	table.insert(fullLines, "")
-
-	if ScriptSettings.AutoReplay then
-		table.insert(fullLines, string.format("\tNTD.AutoReplay(%s)", ScriptSettings.AutoReplay and "true" or "false"))
-	end
-	if gameSettings.difficulty ~= "Unknown" then
+	if ScriptSettings.AutoReplay then table.insert(fullLines, string.format("\tNTD.AutoReplay(%s)", "true")) end
+	if gameSettings.difficulty ~= "Unknown" and gameStartMapId ~= "Moon" then
 		table.insert(fullLines, string.format('\tNTD.Difficulty("%s")', gameSettings.difficulty))
 	end
 	table.insert(fullLines, "")
 
-	table.insert(fullLines, "\t-- Operations (Elapsed seconds from game start)")
-
-	for _, op in ipairs(operations) do
-		local rawE = op.elapsed or 0
-		local e
-		if timeRoundUp then
-			e = math.ceil(rawE * 10) / 10
-		else
-			e = math.floor(rawE * 10) / 10
+	local transition = mapTransitionLog[1]
+	if transition then
+		table.insert(fullLines, string.format("\t-- ===== Phase 1: %s (elapsed from Ready) =====", transition.fromMap))
+		for _, op in ipairs(operations) do
+			if op.elapsed < transition.elapsed then writeOp(fullLines, op) end
 		end
-
-		if op.type == "place" then
-			local info = op.info
-			local x = info.Position and info.Position.X or 0
-			local y = info.Position and info.Position.Y or 0
-			local z = info.Position and info.Position.Z or 0
-
-			-- 只有 Shiny 需要傳 condition（Shiny 版和非 Shiny 版在遊戲內是不同計數器）
-			local pdata = info.UUID and towerUUIDData[info.UUID]
-			local condArg = (pdata and pdata.mutations and pdata.mutations["Shiny"] == true) and ', "Shiny"' or ""
-
-			table.insert(fullLines, string.format(
-				'\tNTD.AddPlaceTower("%s", %.3f, %.3f, %.3f, 0, %.1f%s) -- #%d +%.1fs',
-				info.UnitType, x, y, z, e, condArg, info.Index, e))
-		elseif op.type == "upgrade" then
-			if op.order then
-				table.insert(fullLines, string.format(
-					"\tNTD.AddUpgradeTower(%d, %.1f) -- #%d +%.1fs",
-					op.order, e, op.order, e))
-			else
-				table.insert(fullLines, string.format(
-					"\t-- WARN: upgrade untracked tower [ID:%s] +%.1fs", tostring(op.gameId), e))
+		table.insert(fullLines, "")
+		table.insert(fullLines, string.format('\tNTD.AddMapWait("%s") -- wait for map change, reset phase2 timer', transition.toMap))
+		if mode ~= "phase1" then
+			table.insert(fullLines, "")
+			table.insert(fullLines, string.format("\t-- ===== Phase 2: %s (elapsed from map transition) =====", transition.toMap))
+			for _, op in ipairs(operations) do
+				if op.elapsed >= transition.elapsed then
+					local opCopy = {}; for k, v in pairs(op) do opCopy[k] = v end
+					opCopy.elapsed = op.elapsed - transition.elapsed
+					writeOp(fullLines, opCopy)
+				end
 			end
-		elseif op.type == "sell" then
-			if op.order then
-				table.insert(fullLines, string.format(
-					"\tNTD.AddSellTower(%d, %.1f) -- #%d +%.1fs",
-					op.order, e, op.order, e))
-			else
-				table.insert(fullLines, string.format(
-					"\t-- WARN: sell untracked tower [ID:%s] +%.1fs", tostring(op.gameId), e))
-			end
-		elseif op.type == "skipwave" then
-			table.insert(fullLines, string.format(
-				"\tNTD.AddSkipWave(%.1f) -- +%.1fs", e, e))
-		elseif op.type == "speed" then
-			table.insert(fullLines, string.format(
-				"\tNTD.AddSetSpeed(%d, %.1f) -- Speed %dx +%.1fs",
-				op.speed, e, op.speed, e))
-		elseif op.type == "towerability" then
-			if op.order then
-				table.insert(fullLines, string.format(
-					'\tNTD.AddTowerAbility(%d, "%s", %.1f) -- #%d +%.1fs',
-					op.order, op.abilityName, e, op.order, e))
-			else
-				table.insert(fullLines, string.format(
-					'\t-- WARN: towerability untracked tower [ID:%s] %s +%.1fs',
-					tostring(op.gameId), op.abilityName, e))
+			table.insert(fullLines, "")
+			if gameEndElapsed then
+				local phase2End = gameEndElapsed - transition.elapsed
+				local e = timeRoundUp and (math.ceil(phase2End * 10) / 10) or (math.floor(phase2End * 10) / 10)
+				table.insert(fullLines, string.format("\tNTD.AddEnd(%.1f) -- Time %02d:%02d", e, math.floor(e / 60), math.floor(e % 60)))
 			end
 		end
-	end
-
-	table.insert(fullLines, "")
-	if gameEndElapsed then
-		local rawE = gameEndElapsed
-		local e = timeRoundUp and (math.ceil(rawE * 10) / 10) or (math.floor(rawE * 10) / 10)
-		table.insert(fullLines, string.format("\tNTD.AddEnd(%.1f) -- Time %02d:%02d", e, math.floor(e / 60), math.floor(e % 60)))
+	else
+		table.insert(fullLines, "\t-- Operations (Elapsed seconds from game start)")
+		for _, op in ipairs(operations) do writeOp(fullLines, op) end
+		table.insert(fullLines, "")
+		if gameEndElapsed then
+			local e = timeRoundUp and (math.ceil(gameEndElapsed * 10) / 10) or (math.floor(gameEndElapsed * 10) / 10)
+			table.insert(fullLines, string.format("\tNTD.AddEnd(%.1f) -- Time %02d:%02d", e, math.floor(e / 60), math.floor(e % 60)))
+		end
 	end
 	table.insert(fullLines, "\tNTD.ExecuteQueue()")
 	table.insert(fullLines, '\tprint("[NTD] Queue loaded, waiting for game start...")')
@@ -1371,9 +1715,7 @@ local function generateScript()
 	table.insert(script, "")
 	table.insert(script, string.format("Map: %s  |  Difficulty: %s  |  Modifier: %s", gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier))
 	if gameEndElapsed then
-		local mins = math.floor(gameEndElapsed / 60)
-		local secs = math.floor(gameEndElapsed % 60)
-		table.insert(script, string.format("Time: %dm %ds (%.1fs)", mins, secs, gameEndElapsed))
+		table.insert(script, string.format("Time: %dm %ds (%.1fs)", math.floor(gameEndElapsed / 60), math.floor(gameEndElapsed % 60), gameEndElapsed))
 	end
 	table.insert(script, "")
 	if #usedTowers > 0 then
@@ -1404,6 +1746,281 @@ local function generateScript()
 end
 
 -- ============================================================
+-- 塔能力面板 卡片建構 / 管理函數
+-- ============================================================
+local abiCardOrder = 0
+
+-- 建立單一塔的能力卡片
+local function buildAbilityCard(model)
+	if abiTowerCards[model] then return end
+	local info = abiLiveTowers[model]
+	if not info or not info.abilityKeys or #info.abilityKeys == 0 then return end
+
+	-- 隱藏空提示
+	if abiEmptyLabel then abiEmptyLabel.Visible = false end
+
+	abiCardOrder = abiCardOrder + 1
+	local hasId = info.gameId ~= nil
+	local idStr = hasId and tostring(info.gameId) or "?"
+
+	-- 卡片容器
+	local container = Instance.new("Frame")
+	container.Size = UDim2.new(1, -4, 0, 0) -- 高度自動
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	container.BackgroundColor3 = Theme.Surface
+	container.BackgroundTransparency = 0.3
+	container.BorderSizePixel = 0
+	container.LayoutOrder = abiCardOrder
+	container.ZIndex = 12
+	container.Parent = abilityScrollFrame
+	do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = container end
+
+	local cardLayout = Instance.new("UIListLayout")
+	cardLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	cardLayout.Padding = UDim.new(0, 4)
+	cardLayout.Parent = container
+
+	local cardPadding = Instance.new("UIPadding")
+	cardPadding.PaddingTop = UDim.new(0, 8)
+	cardPadding.PaddingBottom = UDim.new(0, 8)
+	cardPadding.PaddingLeft = UDim.new(0, 8)
+	cardPadding.PaddingRight = UDim.new(0, 8)
+	cardPadding.Parent = container
+
+	local widgets = {}
+	local saved = info.savedAutoStates or {}
+
+	for idx, key in ipairs(info.abilityKeys) do
+		local abi = getAbiData(key)
+		local capturedKey = key
+		local capturedCd = abi.Cooldown
+		local autoEnabled = saved[key] == true
+
+		-- 能力資訊標籤
+		local abiLabel = Instance.new("TextLabel")
+		abiLabel.Size = UDim2.new(1, 0, 0, 22)
+		abiLabel.BackgroundTransparency = 1
+		abiLabel.Text = string.format("#%d  %s  [ID: %s]    %s", info.order, info.name, idStr, T("abilityFmt"):format(abi.Name, abi.Cooldown))
+		abiLabel.TextColor3 = Theme.Accent
+		abiLabel.Font = Theme.FontBold
+		abiLabel.TextSize = 14
+		abiLabel.TextXAlignment = Enum.TextXAlignment.Left
+		abiLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		abiLabel.LayoutOrder = idx * 10
+		abiLabel.ZIndex = 13
+		abiLabel.Parent = container
+
+		-- 按鈕列
+		local btnRow = Instance.new("Frame")
+		btnRow.Size = UDim2.new(1, 0, 0, 30)
+		btnRow.BackgroundTransparency = 1
+		btnRow.LayoutOrder = idx * 10 + 1
+		btnRow.ZIndex = 13
+		btnRow.Parent = container
+
+		-- 進度條放在觸發按鈕下方
+		local barBg = Instance.new("Frame")
+		barBg.Size = UDim2.new(0.65, -4, 1, 0)
+		barBg.Position = UDim2.new(0, 0, 0, 0)
+		barBg.BackgroundColor3 = Theme.SurfaceHighlight
+		barBg.BorderSizePixel = 0
+		barBg.ZIndex = 14
+		barBg.ClipsDescendants = true
+		barBg.Parent = btnRow
+		do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = barBg end
+
+		local barFill = Instance.new("Frame")
+		barFill.Size = UDim2.new(1, 0, 1, 0)
+		barFill.BackgroundColor3 = Theme.Success
+		barFill.BorderSizePixel = 0
+		barFill.ZIndex = 15
+		barFill.Parent = barBg
+		do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = barFill end
+
+		local barText = Instance.new("TextLabel")
+		barText.Size = UDim2.new(1, 0, 1, 0)
+		barText.BackgroundTransparency = 1
+		barText.Text = hasId and T("abilityReady") or T("abilityWaitId")
+		barText.TextColor3 = Theme.Text
+		barText.Font = Theme.FontBold
+		barText.TextSize = 12
+		barText.ZIndex = 16
+		barText.Parent = barBg
+
+		-- 施放按鈕
+		local fireBtn = Instance.new("TextButton")
+		fireBtn.Size = UDim2.new(0.65, -4, 1, 0)
+		fireBtn.Position = UDim2.new(0, 0, 0, 0)
+		fireBtn.BackgroundTransparency = 1
+		fireBtn.Text = ""
+		fireBtn.TextColor3 = hasId and Theme.Text or Theme.TextDim
+		fireBtn.Font = Theme.FontBold
+		fireBtn.TextSize = 13
+		fireBtn.BorderSizePixel = 0
+		fireBtn.ZIndex = 17
+		fireBtn.Parent = btnRow
+
+		fireBtn.MouseButton1Click:Connect(function()
+			invokeTowerAbilitySafely(model, capturedKey, capturedCd)
+		end)
+
+		-- 自動施放 Toggle
+		local autoState = { enabled = autoEnabled }
+		local autoBtn = Instance.new("TextButton")
+		autoBtn.Size = UDim2.new(0.35, -4, 1, 0)
+		autoBtn.Position = UDim2.new(0.65, 4, 0, 0)
+		autoBtn.BackgroundColor3 = autoState.enabled and Theme.Success or Theme.SurfaceHighlight
+		autoBtn.Text = T("abilityAutoLabel") .. (autoState.enabled and " ✓" or "")
+		autoBtn.TextColor3 = autoState.enabled and Theme.TextDark or Theme.TextDim
+		autoBtn.Font = Theme.FontBold
+		autoBtn.TextSize = 13
+		autoBtn.BorderSizePixel = 0
+		autoBtn.ZIndex = 17
+		autoBtn.Parent = btnRow
+		do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = autoBtn end
+
+		autoBtn.MouseButton1Click:Connect(function()
+			autoState.enabled = not autoState.enabled
+			autoBtn.BackgroundColor3 = autoState.enabled and Theme.Success or Theme.SurfaceHighlight
+			autoBtn.Text = T("abilityAutoLabel") .. (autoState.enabled and " ✓" or "")
+			autoBtn.TextColor3 = autoState.enabled and Theme.TextDark or Theme.TextDim
+		end)
+
+		-- 分隔線
+		if idx < #info.abilityKeys then
+			local sep = Instance.new("Frame")
+			sep.Size = UDim2.new(1, 0, 0, 1)
+			sep.BackgroundColor3 = Theme.Border
+			sep.BackgroundTransparency = 0.5
+			sep.BorderSizePixel = 0
+			sep.LayoutOrder = idx * 10 + 3
+			sep.ZIndex = 13
+			sep.Parent = container
+		end
+
+		table.insert(widgets, {
+			barFill = barFill,
+			barText = barText,
+			fireBtn = fireBtn,
+			autoBtn = autoBtn,
+			autoState = autoState,
+			autoFiredAt = nil,
+			key = capturedKey,
+			cd = capturedCd,
+			abiName = abi.Name,
+			abiLabel = abiLabel,
+		})
+	end
+
+	info.savedAutoStates = nil
+	abiTowerCards[model] = { container = container, widgets = widgets }
+end
+
+-- 移除卡片
+local function removeAbilityCard(model)
+	local card = abiTowerCards[model]
+	if not card then return end
+	-- 儲存 auto 狀態
+	if abiLiveTowers[model] then
+		local saved = {}
+		for _, w in ipairs(card.widgets) do saved[w.key] = w.autoState.enabled end
+		abiLiveTowers[model].savedAutoStates = saved
+	end
+	card.container:Destroy()
+	abiTowerCards[model] = nil
+
+	-- 若沒有卡片了，顯示空提示
+	if not next(abiTowerCards) and abiEmptyLabel then
+		abiEmptyLabel.Visible = true
+	end
+end
+
+-- 重建所有卡片（切換語言時使用）
+function rebuildAllAbilityCards()
+	for model in pairs(abiTowerCards) do
+		removeAbilityCard(model)
+	end
+	for model in pairs(abiLiveTowers) do
+		buildAbilityCard(model)
+	end
+end
+
+-- 綁定 gameId 到 model
+local function abiBindGameId(model, gameId)
+	local info = abiLiveTowers[model]
+	if not info or info.gameId ~= nil then return end
+	info.gameId = gameId
+	abiModelByGameId[gameId] = model
+	-- 補回冷卻提示
+	if abiGameIdCooldownHint[gameId] then
+		for k, t0 in pairs(abiGameIdCooldownHint[gameId]) do
+			info.cooldowns[k] = t0
+		end
+		abiGameIdCooldownHint[gameId] = nil
+	end
+	-- 重建卡片以更新標題和按鈕狀態
+	if abiTowerCards[model] then
+		removeAbilityCard(model)
+		buildAbilityCard(model)
+	end
+end
+
+-- 空提示標籤
+abiEmptyLabel = Instance.new("TextLabel")
+abiEmptyLabel.Size = UDim2.new(1, -10, 0, 40)
+abiEmptyLabel.BackgroundTransparency = 1
+abiEmptyLabel.Text = T("abilityNoTowers")
+abiEmptyLabel.TextColor3 = Theme.TextDim
+abiEmptyLabel.Font = Theme.Font
+abiEmptyLabel.TextSize = Theme.SizeNormal
+abiEmptyLabel.ZIndex = 12
+abiEmptyLabel.LayoutOrder = 9999
+abiEmptyLabel.Parent = abilityScrollFrame
+
+-- ============================================================
+-- 塔能力回調（取代外部模組）
+-- ============================================================
+local function onAbilityPlaceTower(towerName, gameId)
+	local bound = false
+	for model, info in pairs(abiLiveTowers) do
+		if info.name == towerName and info.gameId == nil then
+			abiBindGameId(model, gameId)
+			bound = true
+			break
+		end
+	end
+	if not bound then
+		table.insert(abiPendingGameIds, { name = towerName, gameId = gameId, time = tick() })
+	end
+end
+
+local function onAbilitySellTower(gameId)
+	local model = abiModelByGameId[gameId]
+	if model and abiLiveTowers[model] then
+		removeAbilityCard(model)
+		abiLiveTowers[model] = nil
+		abiModelByGameId[gameId] = nil
+	end
+end
+
+local function onAbilityTowerAbility(gameId, abilityKey)
+	-- 自動顯示面板
+	if not abilityFrame.Visible then
+		positionAbilityFrame()
+		abilityFrame.Visible = true
+	end
+	if gameId and abilityKey then
+		local model = abiModelByGameId[gameId]
+		if model and abiLiveTowers[model] then
+			abiLiveTowers[model].cooldowns[abilityKey] = tick()
+		else
+			abiGameIdCooldownHint[gameId] = abiGameIdCooldownHint[gameId] or {}
+			abiGameIdCooldownHint[gameId][abilityKey] = tick()
+		end
+	end
+end
+
+-- ============================================================
 -- 按鈕事件
 -- ============================================================
 copyBtn.MouseButton1Click:Connect(function()
@@ -1414,9 +2031,9 @@ copyBtn.MouseButton1Click:Connect(function()
 			addLog(T("logCopyOk"), Color3.fromRGB(100, 255, 100))
 			copyBtn.Text = T("btnCopied")
 			copyBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-			print("\n========== 生成的排程腳本 ==========")
+			print("\n========== Generated Script ==========")
 			print(s)
-			print("=====================================\n")
+			print("=======================================\n")
 			task.wait(2)
 			copyBtn.Text = T("btnCopy")
 			copyBtn.BackgroundColor3 = Theme.Success
@@ -1431,14 +2048,26 @@ saveBtn.MouseButton1Click:Connect(openSavePanel)
 
 confirmSaveBtn.MouseButton1Click:Connect(function()
 	local fileName = fileNameInput.Text:gsub("[^%w_%-]", "_")
-	if fileName == "" or fileName:match("^_+$") then
-		addLog(T("logInvalidName"), Theme.Warning)
-		return
-	end
-	local s = generateScript()
-	if s then
-		local ok = saveScriptToFile(fileName, s)
-		if ok then saveFrame.Visible = false end
+	if fileName == "" or fileName:match("^_+$") then addLog(T("logInvalidName"), Theme.Warning); return end
+	local transition = mapTransitionLog[1]
+	if currentSaveMode == "separate" and transition then
+		local mainScript = generateScript("phase1")
+		local phase2Script = generatePhase2Script()
+		local mainOk = mainScript and saveScriptToFile(fileName, mainScript)
+		if mainOk then
+			if phase2Script then
+				local p2Name = fileName .. "_" .. transition.toMap
+				saveScriptToFile(p2Name, phase2Script)
+				addLog(T("logSavedPhase2"):format(p2Name), Theme.Accent)
+			end
+			saveFrame.Visible = false
+		end
+	else
+		local s = generateScript()
+		if s then
+			local ok = saveScriptToFile(fileName, s)
+			if ok then saveFrame.Visible = false end
+		end
 	end
 end)
 
@@ -1446,16 +2075,35 @@ cancelSaveBtn.MouseButton1Click:Connect(function() saveFrame.Visible = false end
 saveCloseBtn.MouseButton1Click:Connect(function() saveFrame.Visible = false end)
 manageCloseBtn.MouseButton1Click:Connect(function() manageFrame.Visible = false end)
 closeBtn.MouseButton1Click:Connect(function() parameterFrame.Visible = false end)
+abilityCloseBtn.MouseButton1Click:Connect(function() abilityFrame.Visible = false end)
 refreshScriptsBtn.MouseButton1Click:Connect(function() refreshScriptList() end)
 
 Parameter.MouseButton1Click:Connect(function()
 	if not parameterFrame.Visible then
-		closeAllPanels()
+		closeBlockingPanels()
 		parameterFrame.Position = UDim2.new(
 			mainFrame.Position.X.Scale, mainFrame.Position.X.Offset + mainFrame.AbsoluteSize.X + 10,
 			mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset)
+		parameterFrame.Visible = true
+		if abilityFrame.Visible then
+			positionAbilityFrame()
+		end
+	else
+		parameterFrame.Visible = false
+		if abilityFrame.Visible then
+			positionAbilityFrame()
+		end
 	end
-	parameterFrame.Visible = not parameterFrame.Visible
+end)
+
+abilityBtn.MouseButton1Click:Connect(function()
+	if not abilityFrame.Visible then
+		closeBlockingPanels()
+		positionAbilityFrame()
+		abilityFrame.Visible = true
+	else
+		abilityFrame.Visible = false
+	end
 end)
 
 resetBtn.MouseButton1Click:Connect(function()
@@ -1467,10 +2115,24 @@ resetBtn.MouseButton1Click:Connect(function()
 	skipWaveLog = {}
 	speedChangeLog = {}
 	abilityLog = {}
-	lastDetectedSpeed = 1
-	isGameRunning = false
-	gameStartTime = nil
-	gameEndElapsed = nil
+	lastDetectedSpeed  = 1
+	isGameRunning      = false
+	gameStartTime      = nil
+	gameEndElapsed     = nil
+	gameStartMapId     = nil
+	mapTransitionLog   = {}
+	readyHooked        = false
+
+	-- 重置能力面板
+	for model in pairs(abiTowerCards) do removeAbilityCard(model) end
+	abiLiveTowers = {}
+	abiModelByGameId = {}
+	abiPendingGameIds = {}
+	abiGameIdCooldownHint = {}
+	abiRemoteInFlight = {}
+	abiNextOrder = 1
+	abiCardOrder = 0
+	if abiEmptyLabel then abiEmptyLabel.Visible = true end
 
 	pcall(function()
 		local Values = ReplicatedStorage:WaitForChild("Values", 3)
@@ -1534,214 +2196,9 @@ UserInputService.InputBegan:Connect(function(input, gp)
 	end
 end)
 
--- ============================================================
--- hookmetamethod — 追蹤遊戲操作
--- ============================================================
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-	local method = getnamecallmethod()
-	local args = { ... }
-
-	-- === 放置塔 (InvokeServer) ===
-	if method == "InvokeServer" and PlaceTowerRemote and self == PlaceTowerRemote then
-		local placeArgs = args[1]
-		local towerName = (type(placeArgs) == "table" and placeArgs.towerToPlace) or "Unknown"
-		local targetPos = (type(placeArgs) == "table" and placeArgs.position) or nil
-		local placeUUID = (type(placeArgs) == "table" and placeArgs.towerID) or nil
-
-		local result = oldNamecall(self, ...)
-
-		task.spawn(function()
-			if not isGameRunning then return end
-			local elapsed = getElapsed()
-
-			if type(result) == "table" and result.id then
-				local info = {
-					order       = nextOrder,
-					name        = towerName,
-					id          = result.id,
-					uuid        = placeUUID,
-					position    = targetPos,
-					Index       = nextOrder,
-					UnitType    = towerName,
-					DisplayName = towerName,
-					Position    = targetPos,
-					GameID      = result.id,
-					UUID        = placeUUID,
-					Rotation    = 0,
-					Elapsed     = elapsed,
-				}
-				orderToInfo[nextOrder] = info
-				idToOrder[result.id]   = nextOrder
-				addLog(T("logPlaceTower"):format(nextOrder, towerName .. getMutLabel(placeUUID), elapsed), Color3.fromRGB(100, 255, 100))
-				if DEBUG_MODE then
-					print(string.format("[NTD Tracker] 放置 #%d %s id=%s +%.1fs",
-						nextOrder, towerName, tostring(result.id), elapsed))
-				end
-				nextOrder = nextOrder + 1
-			else
-				addLog(T("logPlaceFailed"):format(towerName), Theme.Warning)
-			end
-		end)
-
-		return result
-	end
-
-	-- === 升級塔 (InvokeServer) ===
-	if method == "InvokeServer" and UpgradeTowerRemote and self == UpgradeTowerRemote then
-		local idStr   = args[1]
-		local towerId = tonumber(idStr)
-
-		local result = oldNamecall(self, ...)
-
-		task.spawn(function()
-			if result ~= true then return end
-			if not isGameRunning then return end
-
-			local order   = towerId and idToOrder[towerId]
-			local info    = order and orderToInfo[order]
-			local elapsed = getElapsed()
-
-			table.insert(upgradeLog, {
-				gameId  = towerId,
-				order   = order,
-				elapsed = elapsed,
-			})
-
-			if info then
-				addLog(T("logUpgrade"):format(info.order, info.UnitType, elapsed), Color3.fromRGB(255, 255, 100))
-				if DEBUG_MODE then
-					print(string.format("[NTD Tracker] 升級 #%d %s id=%s +%.1fs",
-						info.order, info.UnitType, idStr, elapsed))
-				end
-			else
-				addLog(T("logUpgradeUnknown"):format(idStr, elapsed), Color3.fromRGB(255, 200, 100))
-			end
-		end)
-
-		return result
-	end
-
-	-- === 刪除塔 (InvokeServer) ===
-	if method == "InvokeServer" and SellTowerRemote and self == SellTowerRemote then
-		local idStr   = args[1]
-		local towerId = tonumber(idStr)
-
-		local result = oldNamecall(self, ...)
-
-		task.spawn(function()
-			if result ~= true then return end
-			if not isGameRunning then return end
-
-			local order   = towerId and idToOrder[towerId]
-			local info    = order and orderToInfo[order]
-			local elapsed = getElapsed()
-
-			table.insert(sellLog, {
-				gameId  = towerId,
-				order   = order,
-				elapsed = elapsed,
-			})
-
-			if info then
-				addLog(T("logSell"):format(info.order, info.UnitType, elapsed), Color3.fromRGB(255, 100, 100))
-				if DEBUG_MODE then
-					print(string.format("[NTD Tracker] 刪除 #%d %s id=%s +%.1fs",
-						info.order, info.UnitType, idStr, elapsed))
-				end
-			else
-				addLog(T("logSellUnknown"):format(idStr, elapsed), Color3.fromRGB(255, 100, 100))
-			end
-		end)
-
-		return result
-	end
-
-	-- === Ready (FireServer) ===
-	if method == "FireServer" and ReadyRemote and self == ReadyRemote then
-		addLog(T("logReady"), Color3.fromRGB(255, 200, 100))
-		return oldNamecall(self, ...)
-	end
-
-	-- === 跳過波次 (FireServer) ===
-	if method == "FireServer" and SkipWaveRemote and self == SkipWaveRemote then
-		if not isGameRunning then return oldNamecall(self, ...) end
-		local elapsed = getElapsed()
-		table.insert(skipWaveLog, { elapsed = elapsed })
-		addLog(T("logSkipWave"):format(elapsed), Color3.fromRGB(150, 150, 255))
-		return oldNamecall(self, ...)
-	end
-
-	-- === 速度設定 (FireServer) ===
-	if method == "FireServer" and GameSpeedRemote and self == GameSpeedRemote then
-		if not isGameRunning then return oldNamecall(self, ...) end
-		local speed = args[1] or 1
-		local elapsed = getElapsed()
-		if speed ~= lastDetectedSpeed then
-			table.insert(speedChangeLog, { speed = speed, elapsed = elapsed })
-			addLog(T("logSpeedSet"):format(speed, elapsed), Color3.fromRGB(255, 200, 150))
-			lastDetectedSpeed = speed
-		end
-		return oldNamecall(self, ...)
-	end
-
-	-- === 塔能力 (InvokeServer) ===
-	if method == "InvokeServer" and TowerAbilityRemote and self == TowerAbilityRemote then
-		local idStr       = args[1]
-		local abilityName = args[2] or "Unknown"
-		local towerId     = tonumber(idStr)
-
-		local result = oldNamecall(self, ...)
-
-		task.spawn(function()
-			if not isGameRunning then return end
-			local order   = towerId and idToOrder[towerId]
-			local info    = order and orderToInfo[order]
-			local elapsed = getElapsed()
-
-			table.insert(abilityLog, {
-				gameId      = towerId,
-				order       = order,
-				abilityName = abilityName,
-				elapsed     = elapsed,
-			})
-
-			if info then
-				addLog(T("logAbility"):format(info.order, info.UnitType, abilityName, elapsed), Color3.fromRGB(180, 100, 255))
-				if DEBUG_MODE then
-					print(string.format("[NTD Tracker] 塔能力 #%d %s %s id=%s +%.1fs",
-						info.order, info.UnitType, abilityName, idStr, elapsed))
-				end
-			else
-				addLog(T("logAbilityUnknown"):format(idStr, abilityName, elapsed), Color3.fromRGB(180, 100, 255))
-			end
-		end)
-
-		return result
-	end
-
-	-- === 難易度設定 (FireServer) ===
-	if method == "FireServer" and GamemodeRemote and self == GamemodeRemote then
-		local difficulty = args[1] or "Unknown"
-		gameSettings.difficulty = difficulty
-
-		gameStartTime  = tick()
-		isGameRunning  = true
-
-		addLog(T("logDiffStart"):format(difficulty), Color3.fromRGB(100, 255, 100))
-		updateInfoLabel()
-		return oldNamecall(self, ...)
-	end
-
-	return oldNamecall(self, ...)
-end)
-
--- ============================================================
 -- 初始化追蹤系統
--- ============================================================
 local function InitTracker()
-	print("[NTD Tracker] 初始化中...")
-  loadstring(game:HttpGet("https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/Tool/%E5%A1%94%E8%83%BD%E5%8A%9B%E4%BB%8B%E9%9D%A2.lua"))()
+	print("[NTD Tracker] Initializing...")
 	local ok, err = pcall(function()
 		local Remotes   = ReplicatedStorage:WaitForChild("Remotes",  10)
 		local Functions = Remotes:WaitForChild("Functions",          10)
@@ -1760,13 +2217,25 @@ local function InitTracker()
 
 		gameSettings.mapId = Values:FindFirstChild("Map") and Values.Map.Value or "Unknown"
 
+		local MapValue = Values:FindFirstChild("Map")
+		if MapValue then
+			MapValue.Changed:Connect(function(newMap)
+				if isGameRunning and newMap ~= gameSettings.mapId then
+					local elapsed = getElapsed()
+					table.insert(mapTransitionLog, { fromMap = gameSettings.mapId, toMap = newMap, elapsed = elapsed })
+					addLog(string.format("🗺️ Map: %s → %s  +%.1fs", gameSettings.mapId, newMap, elapsed), Color3.fromRGB(255, 200, 80))
+				end
+				gameSettings.mapId = newMap
+				updateInfoLabel()
+			end)
+		end
+
 		local GamemodeValue = Values:FindFirstChild("Gamemode")
 		if GamemodeValue then
 			gameSettings.difficulty = GamemodeValue.Value
 			GamemodeValue.Changed:Connect(function(v)
 				if gameSettings.difficulty ~= v then
 					gameSettings.difficulty = v
-					addLog(T("logDiffUpdate"):format(v), Color3.fromRGB(200, 150, 255))
 					updateInfoLabel()
 				end
 			end)
@@ -1776,26 +2245,346 @@ local function InitTracker()
 		if ModifiersFolder then
 			local function updateModifier()
 				local children = ModifiersFolder:GetChildren()
-				if #children == 0 then
-					gameSettings.modifier = "None"
+				if #children == 0 then gameSettings.modifier = "None"
 				else
 					local names = {}
-					for _, child in ipairs(children) do
-						table.insert(names, child.Name)
-					end
+					for _, child in ipairs(children) do table.insert(names, child.Name) end
 					gameSettings.modifier = table.concat(names, ", ")
 				end
 				updateInfoLabel()
 			end
 			updateModifier()
-			ModifiersFolder.ChildAdded:Connect(function(child)
-				updateModifier()
-				addLog(T("logModAdd"):format(child.Name), Color3.fromRGB(255, 180, 80))
+			ModifiersFolder.ChildAdded:Connect(function(child) updateModifier(); addLog(T("logModAdd"):format(child.Name), Color3.fromRGB(255, 180, 80)) end)
+			ModifiersFolder.ChildRemoved:Connect(function(child) updateModifier(); addLog(T("logModRemove"):format(child.Name, gameSettings.modifier), Color3.fromRGB(180, 180, 180)) end)
+		end
+
+
+		local function snapshot(...)
+			return {...}
+		end
+
+		local function spawnTask(fn)
+			queueHookTask(fn)
+		end
+
+		local function safeCall(fn, ...)
+			return pcall(fn, ...)
+		end
+
+		local NamecallHandlers = {}
+
+		NamecallHandlers.InvokeServer = {}
+
+		-- PlaceTower
+		NamecallHandlers.InvokeServer.PlaceTower = function(_, args, result)
+			local placeArgs = args[1]
+
+			local towerName = (type(placeArgs) == "table" and placeArgs.towerToPlace) or "Unknown"
+			local targetPos = (type(placeArgs) == "table" and placeArgs.position) or nil
+			local placeUUID = (type(placeArgs) == "table" and placeArgs.towerID) or nil
+
+			local _result = result
+			local _towerName = towerName
+			local _targetPos = targetPos
+			local _placeUUID = placeUUID
+
+			spawnTask(function()
+				if not isGameRunning then return end
+
+				local elapsed = getElapsed()
+
+				if type(_result) == "table" and _result.id then
+					local info = {
+						order = nextOrder,
+						name = _towerName,
+						id = _result.id,
+						uuid = _placeUUID,
+						position = _targetPos,
+						Index = nextOrder,
+						UnitType = _towerName,
+						DisplayName = _towerName,
+						Position = _targetPos,
+						GameID = _result.id,
+						UUID = _placeUUID,
+						Rotation = 0,
+						Elapsed = elapsed,
+					}
+
+					orderToInfo[nextOrder] = info
+					idToOrder[_result.id] = nextOrder
+
+					addLog(T("logPlaceTower"):format(nextOrder, _towerName .. getMutLabel(_placeUUID), elapsed), Color3.fromRGB(100,255,100))
+
+					nextOrder += 1
+					safeCall(onAbilityPlaceTower, _towerName, _result.id)
+				else
+					addLog(T("logPlaceFailed"):format(_towerName), Theme.Warning)
+				end
 			end)
-			ModifiersFolder.ChildRemoved:Connect(function(child)
-				updateModifier()
-				addLog(T("logModRemove"):format(child.Name, gameSettings.modifier), Color3.fromRGB(180, 180, 180))
+
+			return result
+		end
+
+		-- UpgradeTower
+		NamecallHandlers.InvokeServer.UpgradeTower = function(_, args, result)
+			local idStr = args[1]
+			local towerId = tonumber(idStr)
+
+			local _result = result
+			local _towerId = towerId
+			local _idStr = idStr
+
+			spawnTask(function()
+				if _result ~= true or not isGameRunning then return end
+
+				local order = _towerId and idToOrder[_towerId]
+				local info = order and orderToInfo[order]
+				local elapsed = getElapsed()
+
+				table.insert(upgradeLog, {
+					gameId = _towerId,
+					order = order,
+					elapsed = elapsed
+				})
+
+				if info then
+					addLog(T("logUpgrade"):format(info.order, info.UnitType, elapsed), Color3.fromRGB(255,255,100))
+				else
+					addLog(T("logUpgradeUnknown"):format(_idStr, elapsed), Color3.fromRGB(255,200,100))
+				end
 			end)
+
+			return result
+		end
+
+		-- SellTower
+		NamecallHandlers.InvokeServer.SellTower = function(_, args, result)
+			local idStr = args[1]
+			local towerId = tonumber(idStr)
+
+			local _result = result
+			local _towerId = towerId
+			local _idStr = idStr
+
+			spawnTask(function()
+				if _result ~= true or not isGameRunning then return end
+
+				local order = _towerId and idToOrder[_towerId]
+				local info = order and orderToInfo[order]
+				local elapsed = getElapsed()
+
+				table.insert(sellLog, {
+					gameId = _towerId,
+					order = order,
+					elapsed = elapsed
+				})
+
+				safeCall(onAbilitySellTower, _towerId)
+
+				if info then
+					addLog(T("logSell"):format(info.order, info.UnitType, elapsed), Color3.fromRGB(255,100,100))
+				else
+					addLog(T("logSellUnknown"):format(_idStr, elapsed), Color3.fromRGB(255,100,100))
+				end
+			end)
+
+			return result
+		end
+
+		-- TowerAbility
+		NamecallHandlers.InvokeServer.TowerAbility = function(_, args, result)
+			local idStr = args[1]
+			local abilityName = args[2] or "Unknown"
+			local towerId = tonumber(idStr)
+
+			local _towerId = towerId
+			local _abilityName = abilityName
+			local _idStr = idStr
+
+			spawnTask(function()
+				if not isGameRunning then return end
+
+				local order = _towerId and idToOrder[_towerId]
+				local info = order and orderToInfo[order]
+				local elapsed = getElapsed()
+
+				table.insert(abilityLog, {
+					gameId = _towerId,
+					order = order,
+					abilityName = _abilityName,
+					elapsed = elapsed
+				})
+
+				safeCall(onAbilityTowerAbility, _towerId, _abilityName)
+
+				if info then
+					addLog(T("logAbility"):format(info.order, info.UnitType, _abilityName, elapsed), Color3.fromRGB(180,100,255))
+				else
+					addLog(T("logAbilityUnknown"):format(_idStr, _abilityName, elapsed), Color3.fromRGB(180,100,255))
+				end
+			end)
+
+			return result
+		end
+
+		NamecallHandlers.FireServer = {}
+
+		NamecallHandlers.FireServer.Ready = function(_, _, result)
+			local mapId = gameSettings.mapId
+			readyHooked = true
+			if mapId == "Moon" then
+				startGameTimer(mapId)
+			end
+
+			spawnTask(function()
+				updateInfoLabel()
+				if mapId == "Moon" then
+					addLog(T("logSpecialMapReady"):format(mapId), Color3.fromRGB(100,220,255))
+				else
+					addLog(T("logReady"), Color3.fromRGB(255,200,100))
+				end
+			end)
+
+			return result
+		end
+
+		NamecallHandlers.FireServer.SkipWave = function(_, _, result)
+			if isGameRunning then
+				local elapsed = getElapsed()
+				table.insert(skipWaveLog, { elapsed = elapsed })
+
+				spawnTask(function()
+					addLog(T("logSkipWave"):format(elapsed), Color3.fromRGB(150,150,255))
+				end)
+			end
+
+			return result
+		end
+
+		NamecallHandlers.FireServer.GameSpeed = function(_, args, result)
+			local speed = args[1] or 1
+
+			if isGameRunning and speed ~= lastDetectedSpeed then
+				lastDetectedSpeed = speed
+				local elapsed = getElapsed()
+
+				table.insert(speedChangeLog, {
+					speed = speed,
+					elapsed = elapsed
+				})
+
+				spawnTask(function()
+					addLog(T("logSpeedSet"):format(speed, elapsed), Color3.fromRGB(255,200,150))
+				end)
+			end
+
+			return result
+		end
+
+		NamecallHandlers.FireServer.Gamemode = function(_, args, result)
+			local difficulty = args[1] or "Unknown"
+
+			gameSettings.difficulty = difficulty
+
+			local shouldStart = readyHooked and gameSettings.mapId ~= "Moon" and not isGameRunning
+			local started = shouldStart and startGameTimer(gameSettings.mapId)
+
+			spawnTask(function()
+				if started then
+					addLog(T("logDiffStart"):format(difficulty), Color3.fromRGB(100,255,100))
+				elseif isGameRunning then
+					addLog(T("logDiffUpdate"):format(difficulty), Color3.fromRGB(200,150,255))
+				end
+				updateInfoLabel()
+			end)
+
+			return result
+		end
+
+		-- Hook
+		local oldNamecall
+		oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+			local method = string.lower(getnamecallmethod())
+			local args = snapshot(...)
+			local result
+
+			if method == "invokeserver" then
+
+				if self == PlaceTowerRemote then
+					result = oldNamecall(self, ...)
+					return NamecallHandlers.InvokeServer.PlaceTower(self, args, result)
+				end
+
+				if self == UpgradeTowerRemote then
+					result = oldNamecall(self, ...)
+					return NamecallHandlers.InvokeServer.UpgradeTower(self, args, result)
+				end
+
+				if self == SellTowerRemote then
+					result = oldNamecall(self, ...)
+					return NamecallHandlers.InvokeServer.SellTower(self, args, result)
+				end
+
+				if self == TowerAbilityRemote then
+					result = oldNamecall(self, ...)
+					return NamecallHandlers.InvokeServer.TowerAbility(self, args, result)
+				end
+
+			end
+
+			if method == "fireserver" then
+
+				if self == ReadyRemote then
+					result = oldNamecall(self, ...)
+					return NamecallHandlers.FireServer.Ready(self, args, result)
+				end
+
+				if self == SkipWaveRemote then
+					result = oldNamecall(self, ...)
+					return NamecallHandlers.FireServer.SkipWave(self, args, result)
+				end
+
+				if self == GameSpeedRemote then
+					result = oldNamecall(self, ...)
+					return NamecallHandlers.FireServer.GameSpeed(self, args, result)
+				end
+
+				if self == GamemodeRemote then
+					result = oldNamecall(self, ...)
+					return NamecallHandlers.FireServer.Gamemode(self, args, result)
+				end
+
+			end
+
+			return oldNamecall(self, ...)
+		end))
+
+		print("[NTD Tracker] hookmetamethod OK ")
+
+		-- === 載入塔能力資料（內嵌，不載入外部模組） ===
+		local Modules = ReplicatedStorage:FindFirstChild("Modules")
+		local Data = Modules and Modules:FindFirstChild("Data")
+		if Data then
+			pcall(function()
+				local mod = Data:WaitForChild("TowerAbilities", 5)
+				if mod then TowerAbilitiesData = require(mod) end
+			end)
+			pcall(function()
+				local mod = Data:WaitForChild("Towers", 5)
+				if mod then TowersData = require(mod) end
+			end)
+		end
+
+		-- 建立 towersWithAbility 索引
+		local nameList = type(TowersData.getTowerNames) == "function" and TowersData.getTowerNames() or {}
+		for _, towerName in ipairs(nameList) do
+			local keys = fetchAbilityKeys(towerName)
+			if #keys > 0 then towersWithAbility[towerName] = keys end
+		end
+		if next(towersWithAbility) then
+			print("[NTD Tracker] Tower ability index built")
+		else
+			warn("[NTD Tracker] TowersData empty or require failed, ability scanner disabled")
 		end
 	end)
 
@@ -1804,8 +2593,7 @@ local function InitTracker()
 		local Constants = nil
 		for _, obj in ipairs(getgc(true)) do
 			if type(obj) == "table" and rawget(obj, "currentPlrData") then
-				Constants = obj
-				break
+				Constants = obj; break
 			end
 		end
 		if not Constants then return end
@@ -1818,36 +2606,173 @@ local function InitTracker()
 				count = count + 1
 			end
 		end
-		print(string.format("[NTD Tracker] 已讀取 %d 座塔資料 (含 Mutation)", count))
+		print(string.format("[NTD Tracker] Loaded %d tower data (with Mutations)", count))
 	end)
 
-	if not ok then
-		warn("[NTD Tracker] 初始化失敗:", err)
-		addLog(T("logInitFailed"), Theme.Error)
-		return false
+  task.defer(function()
+		if not ok then
+			warn("[NTD Tracker] Init failed:", err)
+			addLog(T("logInitFailed"), Theme.Error)
+			return
+		end
+
+		updateInfoLabel()
+
+		addLog(T("logWaitReady"), Color3.fromRGB(255, 200, 100))
+		addLog(T("logFlow"), Color3.fromRGB(180, 180, 255))
+
+		GameRunningValue.Changed:Connect(function(v)
+			if v == false and isGameRunning then
+				local endElapsed = getElapsed()
+				gameEndElapsed = endElapsed
+				isGameRunning = false
+				gameStartTime = nil
+				readyHooked = false
+				stopAbilityRemoteTriggers()
+				addLog(T("logGameEnd"):format(math.floor(endElapsed / 60), math.floor(endElapsed % 60), endElapsed), Color3.fromRGB(255, 255, 100))
+			end
+		end)
+
+		addLog(T("logStarted"):format(gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier), Color3.fromRGB(100, 255, 100))
+		print("[NTD Tracker] Init complete")
+	end)
+end
+
+local abiScanTimer = 0
+local abiUpdateTimer = 0
+
+RunService.Heartbeat:Connect(function(dt)
+	flushHookTaskQueue()
+
+	-- === 1. 掃描器（每 0.5 秒）===
+	abiScanTimer = abiScanTimer + dt
+	if abiScanTimer >= 0.5 then
+		abiScanTimer = 0
+
+		local Map = workspace:FindFirstChild("Map")
+		local Towers = Map and Map:FindFirstChild("Towers")
+
+		if Towers then
+			local seen = {}
+
+			-- 偵測新塔
+			for _, child in ipairs(Towers:GetChildren()) do
+				local towerName = child.Name
+				if towersWithAbility[towerName] then
+					seen[child] = true
+					if not abiLiveTowers[child] then
+						local order = abiNextOrder
+						abiNextOrder = abiNextOrder + 1
+						abiLiveTowers[child] = {
+							name = towerName,
+							order = order,
+							abilityKeys = towersWithAbility[towerName],
+							gameId = nil,
+							cooldowns = {},
+						}
+
+						-- FIFO 配對 pending
+						for i, pending in ipairs(abiPendingGameIds) do
+							if pending.name == towerName then
+								abiLiveTowers[child].gameId = pending.gameId
+								abiModelByGameId[pending.gameId] = child
+								if abiGameIdCooldownHint[pending.gameId] then
+									for k, t0 in pairs(abiGameIdCooldownHint[pending.gameId]) do
+										abiLiveTowers[child].cooldowns[k] = t0
+									end
+									abiGameIdCooldownHint[pending.gameId] = nil
+								end
+								table.remove(abiPendingGameIds, i)
+								break
+							end
+						end
+
+						-- 自動顯示面板並建立卡片
+						if not abilityFrame.Visible then
+							positionAbilityFrame()
+							abilityFrame.Visible = true
+						end
+						buildAbilityCard(child)
+					end
+				end
+			end
+
+			-- 偵測消失的塔
+			local toRemove = {}
+			for model in pairs(abiLiveTowers) do
+				if model.Parent == nil or not seen[model] then
+					table.insert(toRemove, model)
+				end
+			end
+			for _, model in ipairs(toRemove) do
+				local info = abiLiveTowers[model]
+				if info and info.gameId then abiModelByGameId[info.gameId] = nil end
+				removeAbilityCard(model)
+				abiLiveTowers[model] = nil
+			end
+		else
+			-- Towers 容器不存在，清理已銷毀的
+			local toRemove = {}
+			for model in pairs(abiLiveTowers) do
+				if model.Parent == nil then table.insert(toRemove, model) end
+			end
+			for _, model in ipairs(toRemove) do
+				local info = abiLiveTowers[model]
+				if info and info.gameId then abiModelByGameId[info.gameId] = nil end
+				removeAbilityCard(model)
+				abiLiveTowers[model] = nil
+			end
+		end
 	end
 
-	updateInfoLabel()
+	-- === 2. 進度條更新（每 0.1 秒）===
+	abiUpdateTimer = abiUpdateTimer + dt
+	if abiUpdateTimer < 0.1 then return end
+	abiUpdateTimer = 0
 
-	addLog(T("logWaitReady"), Color3.fromRGB(255, 200, 100))
-	addLog(T("logFlow"), Color3.fromRGB(180, 180, 255))
+	for model, info in pairs(abiLiveTowers) do
+		local card = abiTowerCards[model]
+		if not card then continue end
+		local hasId = info.gameId ~= nil
+		local canUseAbility = isGameRunning and hasId
 
-	GameRunningValue.Changed:Connect(function(v)
-		if v == false and isGameRunning then
-			local endElapsed = getElapsed()
-			gameEndElapsed = endElapsed
-			isGameRunning = false
-			gameStartTime = nil
-			local mins = math.floor(endElapsed / 60)
-			local secs = math.floor(endElapsed % 60)
-			addLog(T("logGameEnd"):format(mins, secs, endElapsed), Color3.fromRGB(255, 255, 100))
+		for _, w in ipairs(card.widgets) do
+			local t0 = info.cooldowns[w.key]
+
+			if not t0 then
+				-- 就緒狀態
+				w.barFill.Size = UDim2.new(1, 0, 1, 0)
+				w.barFill.BackgroundColor3 = canUseAbility and Theme.Success or Theme.SurfaceHighlight
+				w.barText.Text = canUseAbility and T("abilityReady") or T("abilityWaitId")
+				w.fireBtn.TextColor3 = canUseAbility and Theme.Text or Theme.TextDim
+				-- auto 開啟且有 id：初始化冷卻以開始循環
+				if canUseAbility and w.autoState.enabled then
+					info.cooldowns[w.key] = tick() - w.cd - 1
+				end
+				continue
+			end
+
+			local elapsed = tick() - t0
+			local remaining = math.max(0, w.cd - elapsed)
+			local fillPct = math.min(elapsed / w.cd, 1)
+
+			w.barFill.Size = UDim2.new(fillPct, 0, 1, 0)
+			w.barFill.BackgroundColor3 = remaining > 0 and Theme.Accent or Theme.Success
+			w.barText.Text = remaining > 0 and T("abilityTimerFmt"):format(remaining) or T("abilityReady")
+
+			-- 按鈕狀態
+			local canFire = canUseAbility and remaining == 0
+			w.fireBtn.TextColor3 = canFire and Theme.Text or Theme.TextDim
+
+			-- 自動施放
+			if canUseAbility and w.autoState.enabled and remaining == 0 and elapsed >= w.cd + 0.5 and w.autoFiredAt ~= t0 then
+				if invokeTowerAbilitySafely(model, w.key, w.cd) then
+					w.autoFiredAt = t0
+				end
+			end
 		end
-	end)
-
-	addLog(T("logStarted"):format(gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier), Color3.fromRGB(100, 255, 100))
-	print("[NTD Tracker] ✅ 初始化完成")
-	return true
-end
+	end
+end)
 
 -- ============================================================
 
