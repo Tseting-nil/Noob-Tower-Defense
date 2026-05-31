@@ -55,6 +55,7 @@ local L = {
 		skip_enchant      = "跳過附魔等待",
 		block_popup       = "去除煩人的彈窗",
 		auto_x10          = "自動x10",
+    auto_x20          = "自動x20",
 		single_pull       = "單抽出奇蹟!!",
 		cooldown_ready    = "狀態: 可抽取",
 		cooldown_waiting  = "狀態: 冷卻中",
@@ -538,7 +539,8 @@ Mainfunction.Summon = function(x, BannerType)
     return
   end
   local Coin = Gametable.LocalPlayer.Coins.Value
-  local cost = x == 1 and 200 or 1800
+  local singleCost = (BannerType == "Retro") and 200 or 100
+  local cost = x == 1 and singleCost or math.floor(singleCost * x * 0.9)
   if Coin < cost then
     Msg:Warning(T.msg_nocoin)
     return "Not enough coins"
@@ -550,16 +552,14 @@ Mainfunction.Summon = function(x, BannerType)
   local banner_name = BannerType or "Standard"
   local banner_btn = Scripttable.Summon.Gui.Container.Banners[banner_name].Button
   firesignal(banner_btn.Activated)
-  local summon_key = x == 1 and "Summon1" or "Summon2"
+  local summon_key = x == 1 and "Summon1" or x == 10 and "Summon2" or "Summon3"
   local Summon_btn = Scripttable.Summon.Gui.Container.Buttons[summon_key].Button
   firesignal(Summon_btn.Activated)
 end
 
 -- ========================================================================== --
 -- GUI
-
 local ReGui = loadstring(game:HttpGet("https://gist.githubusercontent.com/Tseting-nil/169b7303e1418cb301bad5ab427e9351/raw/93e90190f628387b545eef62b49e4ce146d1dad8/GUI:ReGui"))()
-
 local TabsWindow = ReGui:TabsWindow({
 	Title = T.title,
 	Visible = true,
@@ -810,6 +810,40 @@ Row_Retro:Radiobox({
 	end,
 })
 
+Row_Retro:Radiobox({
+	Value = false,
+	Label = T.auto_x20,
+	TextSize = radioTextSize,
+	Disabled = false,
+	Callback = function(self, Value)
+		if Value then
+			if Scripttable.Summon.AutoRunning then
+        Msg:Warning(T.msg_auto_conflict)
+				self:SetValue(false)
+				return
+			end
+			Scripttable.Summon.AutoRunning = true
+			Scripttable.Summon.Retro_enable = true
+			task.spawn(function()
+				while Scripttable.Summon.Retro_enable do
+					local start = Mainfunction.Summon(20, "Standard")
+          if start == "Not enough coins" then
+            self:SetValue(false)
+            return
+          end
+					Scripttable.Summon.ISCooldown = true
+					task.wait(Scripttable.Summon.Cooldown)
+					Scripttable.Summon.ISCooldown = false
+				end
+				Scripttable.Summon.AutoRunning = false
+			end)
+		else
+      Scripttable.Summon.AutoRunning = false
+			Scripttable.Summon.Retro_enable = false
+		end
+	end,
+})
+
 Tab_Summon:Separator({
 	Text = T.sep_retro
 })
@@ -848,6 +882,40 @@ Row_Standard:Radiobox({
 			task.spawn(function()
 				while Scripttable.Summon.Standard_enable do
 					local start = Mainfunction.Summon(10, "Retro")
+					if start == "Not enough coins" then
+						self:SetValue(false)
+            return
+					end
+					Scripttable.Summon.ISCooldown = true
+					task.wait(Scripttable.Summon.Cooldown)
+					Scripttable.Summon.ISCooldown = false
+				end
+				Scripttable.Summon.AutoRunning = false
+			end)
+		else
+      Scripttable.Summon.AutoRunning = false
+			Scripttable.Summon.Standard_enable = false
+		end
+	end,
+})
+
+Row_Standard:Radiobox({
+	Value = false,
+	Label = T.auto_x20,
+	TextSize = radioTextSize,
+	Disabled = false,
+	Callback = function(self, Value)
+		if Value then
+			if Scripttable.Summon.AutoRunning then
+        Msg:Warning(T.msg_auto_conflict)
+				self:SetValue(false)
+				return
+			end
+			Scripttable.Summon.AutoRunning = true
+			Scripttable.Summon.Standard_enable = true
+			task.spawn(function()
+				while Scripttable.Summon.Standard_enable do
+					local start = Mainfunction.Summon(20, "Retro")
 					if start == "Not enough coins" then
 						self:SetValue(false)
             return
