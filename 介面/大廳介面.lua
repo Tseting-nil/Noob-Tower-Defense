@@ -8,6 +8,14 @@ local Msg = getgenv().NotificationModule
 -- 遊戲函數
 local HttpService = game:GetService("HttpService")
 
+-- 反AFK
+local AntiAFK = game:GetService("VirtualUser")
+game.Players.LocalPlayer.Idled:Connect(function()
+	AntiAFK:CaptureController()
+	AntiAFK:ClickButton2(Vector2.new())
+	task.wait(2)
+end)
+
 -- i18n
 local currentLang = "zh"
 do
