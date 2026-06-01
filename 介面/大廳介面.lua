@@ -92,6 +92,10 @@ local L = {
 		localscript_info_no_block  = "（無資訊區塊）",
 		localscript_info_read_fail = "讀取失敗",
 		localscript_info_close     = "關閉",
+		sep_auto_master    = "自動 Master",
+		auto_master        = "自動 Master",
+		msg_master_ok      = "✓ %s → %s",
+		msg_master_fail    = "✗ Master 失敗：%s",
 	},
 	en = {
 		title             = "Lobby Script",
@@ -153,6 +157,10 @@ local L = {
 		localscript_info_no_block  = "(No info block)",
 		localscript_info_read_fail = "Read failed",
 		localscript_info_close     = "Close",
+		sep_auto_master    = "Auto Master",
+		auto_master        = "Auto Master",
+		msg_master_ok      = "✓ %s → %s",
+		msg_master_fail    = "✗ Master failed: %s",
 	},
 }
 local T = L[currentLang]
@@ -362,6 +370,77 @@ for _, obj in ipairs(getgc(true)) do
     _TowersData = obj
     break
   end
+end
+
+-- ========== AutoMaster ==========
+Scripttable.AutoMaster = false
+
+-- 撈 Handler UI 更新函數
+local _updateUnitsList, _updateUnitsInfo, _updateMasteryTab
+for _, obj in ipairs(getgc(true)) do
+	if type(obj) == "function" then
+		local ok, consts = pcall(getconstants, obj)
+		if not ok or not consts then continue end
+		if not _updateUnitsList then
+			local a, b = false, false
+			for _, c in ipairs(consts) do
+				if c == "MutationKey" then a = true end
+				if c == "HoverIndex" then b = true end
+			end
+			if a and b then _updateUnitsList = obj end
+		end
+		if not _updateUnitsInfo then
+			local a, b = false, false
+			for _, c in ipairs(consts) do
+				if c == "previousSelectedUnit" then a = true end
+				if c == "SHINY_PRICE_MULTIPLIER" then b = true end
+			end
+			if a and b then _updateUnitsInfo = obj end
+		end
+		if not _updateMasteryTab then
+			local a, b = false, false
+			for _, c in ipairs(consts) do
+				if c == "GlobalCounts" then a = true end
+				if c == "cycleIndex" then b = true end
+			end
+			if a and b then _updateMasteryTab = obj end
+		end
+	end
+end
+
+Mainfunction.AutoMaster = function()
+	local Constants = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Constants"))
+	local MasterRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("MasterUnit")
+
+	while Scripttable.AutoMaster do
+		local towers = Constants.currentPlrData
+			and Constants.currentPlrData.Items
+			and Constants.currentPlrData.Items.Towers
+
+		if towers then
+			for id, data in pairs(towers) do
+				if not Scripttable.AutoMaster then break end
+				local mastery = data.Mastery or 1
+				local nextData = _TowersData.Masteries[mastery + 1]
+				if nextData and data.Level >= nextData.Level then
+					local success = MasterRemote:InvokeServer(id)
+					if success == true then
+						data.Mastery = mastery + 1
+						data.Level = 1
+						data.XP = 0
+						if _updateMasteryTab then pcall(_updateMasteryTab) end
+						if _updateUnitsInfo then pcall(_updateUnitsInfo) end
+						if _updateUnitsList then pcall(_updateUnitsList) end
+						Msg:Success(string.format(T.msg_master_ok, data.Tower, nextData.Name))
+					else
+						Msg:Warning(string.format(T.msg_master_fail, data.Tower))
+					end
+					task.wait(0.6)
+				end
+			end
+		end
+		task.wait(5)
+	end
 end
 
 local function _getRarity(towerName)
@@ -711,6 +790,20 @@ Tab_main:Radiobox({
 	Disabled = false,
 	Callback = function(self, Value)
 		Scripttable.Gamepass.Skip_DrawBox_Animation = Value
+	end,
+})
+
+Tab_main:Separator({ Text = T.sep_auto_master })
+
+Tab_main:Radiobox({
+	Value = false,
+	Label = T.auto_master,
+	TextSize = radioTextSize,
+	Callback = function(self, Value)
+		Scripttable.AutoMaster = Value
+		if Value then
+			task.spawn(Mainfunction.AutoMaster)
+		end
 	end,
 })
 
