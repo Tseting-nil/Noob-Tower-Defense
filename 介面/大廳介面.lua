@@ -226,6 +226,7 @@ local Scripttable = {
   Skip_Enchanting = false,
   Localscript = {
     path = [[Tsetingnil_script\NTD\Script]],
+    Excluded = {"_Venus", "_Saturn", "_Mars"},
     ScriptListTable = nil,
   }
 }
@@ -632,11 +633,11 @@ Mainfunction.Summon = function(x, BannerType)
     Msg:Warning(T.msg_nocoin)
     return "Not enough coins"
   end
+  local banner_name = BannerType or "Standard"
   if Scripttable.Summon.Skip then
-    ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(x, "Retro")
+    ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(x, banner_name)
     return
   end
-  local banner_name = BannerType or "Standard"
   local banner_btn = Scripttable.Summon.Gui.Container.Banners[banner_name].Button
   firesignal(banner_btn.Activated)
   local summon_key = x == 1 and "Summon1" or x == 10 and "Summon2" or "Summon3"
@@ -1076,8 +1077,16 @@ Mainfunction.BuildScriptList = function()
 	if ok and files then
 		for _, filePath in ipairs(files) do
 			local name = filePath:match("([^/\\]+)$") or filePath
-			if name:match("%.lua$") then
-				scripts[#scripts + 1] = { name = name, path = filePath }
+			if name:match("%.lua$") or name:match("%.txt$") then
+				local excluded = false
+				for _, suffix in ipairs(Scripttable.Localscript.Excluded) do
+					if name:match(suffix .. "%.lua$") or name:match(suffix .. "%.txt$") then
+						excluded = true; break
+					end
+				end
+				if not excluded then
+					scripts[#scripts + 1] = { name = name, path = filePath }
+				end
 			end
 		end
 	end

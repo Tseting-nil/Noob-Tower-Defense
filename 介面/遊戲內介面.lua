@@ -389,8 +389,8 @@ end)
 local Localscript = {
   path = [[Tsetingnil_script\NTD\Script]],
   ScriptListTable = nil,
+  Excluded = {},
 }
-
 
 local BuildScriptList
 BuildScriptList = function()
@@ -401,8 +401,16 @@ BuildScriptList = function()
 	if ok and files then
 		for _, filePath in ipairs(files) do
 			local name = filePath:match("([^/\\]+)$") or filePath
-			if name:match("%.lua$") then
-				scripts[#scripts + 1] = { name = name, path = filePath }
+			if name:match("%.lua$") or name:match("%.txt$") then
+				local excluded = false
+				for _, suffix in ipairs(Localscript.Excluded) do
+					if name:match(suffix .. "%.lua$") or name:match(suffix .. "%.txt$") then
+						excluded = true; break
+					end
+				end
+				if not excluded then
+					scripts[#scripts + 1] = { name = name, path = filePath }
+				end
 			end
 		end
 	end
