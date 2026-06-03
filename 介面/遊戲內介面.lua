@@ -168,7 +168,6 @@ local TabsWindow =  ReGui:TabsWindow({
 	Title = L.windowTitle,
 	Size = windowSize,
 	NoScroll = true,
-  NoResize = true,
 })
 
 local Tabs = {}
@@ -389,7 +388,7 @@ end)
 local Localscript = {
   path = [[Tsetingnil_script\NTD\Script]],
   ScriptListTable = nil,
-  Excluded = {},
+  Excluded = {"_Venus", "_Saturn", "_Mars"},
 }
 
 local BuildScriptList
