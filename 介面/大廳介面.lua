@@ -60,6 +60,21 @@ local L = {
 		summon_notify        = "通知",
 		summon_notify_shiny  = "閃亮 %s  %s",
 		summon_notify_rarity = "%s  %s",
+		autodelete_header    = "自動刪除抽取物件",
+		autodelete_enable    = "自動刪除",
+		autodelete_applied   = "已套用自動刪除設定",
+		autodelete_off       = "已關閉自動刪除",
+		autodelete_save      = "儲存",
+		autodelete_load      = "載入",
+		autodelete_saved     = "已儲存自動刪除設定",
+		autodelete_loaded    = "已載入自動刪除設定",
+		autodelete_save_fail = "儲存失敗: %s",
+		autodelete_no_config = "找不到自動刪除設定檔",
+		rarity_Common        = "常見",
+		rarity_Rare          = "稀有",
+		rarity_Epic          = "史詩",
+		rarity_Legendary     = "傳奇",
+		rarity_shiny         = "閃亮",
 		skip_enchant      = "跳過附魔等待",
 		block_popup       = "去除煩人的彈窗",
 		auto_x10          = "自動x10",
@@ -100,10 +115,12 @@ local L = {
 		localscript_info_no_block  = "（無資訊區塊）",
 		localscript_info_read_fail = "讀取失敗",
 		localscript_info_close     = "關閉",
+		localscript_info_copy      = "複製",
+		localscript_info_copied    = "已複製到剪貼簿",
 		sep_auto_master    = "自動 Master",
 		auto_master        = "自動 Master",
-		msg_master_ok      = "✓ %s → %s",
-		msg_master_fail    = "✗ Master 失敗：%s",
+		msg_master_ok      = "%s → %s",
+		msg_master_fail    = "Master 失敗：%s",
 	},
 	en = {
 		title             = "Lobby Script",
@@ -126,6 +143,21 @@ local L = {
 		summon_notify        = "Notify",
 		summon_notify_shiny  = "Shiny %s  %s",
 		summon_notify_rarity = "%s  %s",
+		autodelete_header    = "Auto Delete Summons",
+		autodelete_enable    = "Auto Delete",
+		autodelete_applied   = "Auto-delete settings applied",
+		autodelete_off       = "Auto-delete disabled",
+		autodelete_save      = "Save",
+		autodelete_load      = "Load",
+		autodelete_saved     = "Auto-delete config saved",
+		autodelete_loaded    = "Auto-delete config loaded",
+		autodelete_save_fail = "Save failed: %s",
+		autodelete_no_config = "No auto-delete config found",
+		rarity_Common        = "Common",
+		rarity_Rare          = "Rare",
+		rarity_Epic          = "Epic",
+		rarity_Legendary     = "Legendary",
+		rarity_shiny         = "Shiny",
 		skip_enchant      = "Skip Enchant Wait",
 		block_popup       = "Block Annoying Popups",
 		auto_x10          = "Auto x10",
@@ -165,10 +197,12 @@ local L = {
 		localscript_info_no_block  = "(No info block)",
 		localscript_info_read_fail = "Read failed",
 		localscript_info_close     = "Close",
+		localscript_info_copy      = "Copy",
+		localscript_info_copied    = "Copied to clipboard",
 		sep_auto_master    = "Auto Master",
 		auto_master        = "Auto Master",
-		msg_master_ok      = "✓ %s → %s",
-		msg_master_fail    = "✗ Master failed: %s",
+		msg_master_ok      = "%s → %s",
+		msg_master_fail    = "Master failed: %s",
 	},
 }
 local T = L[currentLang]
@@ -221,6 +255,20 @@ local Scripttable = {
       },
       NOTIFY_SHINY = true,
     },
+    AutoDelete = {
+      enable = false,
+      HIGH_TIER = {
+        Common    = false,
+        Rare      = false,
+        Epic      = false,
+        Legendary = false,
+        Shiny_Common    = false,
+        Shiny_Rare      = false,
+        Shiny_Epic      = false,
+        Shiny_Legendary = false,
+      },
+      UIReady = false,
+    }
 	},
 	blockFavouritePrompt = true,
   Skip_Enchanting = false,
@@ -228,6 +276,9 @@ local Scripttable = {
     path = [[Tsetingnil_script\NTD\Script]],
     Excluded = {"_Venus", "_Saturn", "_Mars"},
     ScriptListTable = nil,
+    -- 自動刪除設定檔路徑
+    ConfigDir  = [[Tsetingnil_script\NTD\Config]],
+    ConfigPath = [[Tsetingnil_script\NTD\Config\Summon_AutoDelete.json]],
   }
 }
 local Mainfunction = {}
@@ -1035,6 +1086,105 @@ Row_Standard:Radiobox({
 	end,
 })
 
+do
+  local AD = Scripttable.Summon.AutoDelete
+  AD.Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("AutoDelete")
+  AD.Frame = Scripttable.Summon.Gui:FindFirstChild("AutoDelete")
+  pcall(function()
+    AD.Colours = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Colours"))
+  end)
+end
+
+local function _colourNativeToggle(rarity, kind, isOn)
+  local AD = Scripttable.Summon.AutoDelete
+  if not (AD.Frame and AD.Colours) then return end
+  pcall(function()
+    local entry = AD.Frame.Info.List:FindFirstChild(rarity)
+    if not entry then return end
+    local toggle = entry.Container.Toggle:FindFirstChild(kind)
+    if not toggle then return end
+    local colour = isOn and AD.Colours.Green or AD.Colours.Red
+    for _, d in ipairs(toggle:GetDescendants()) do
+      if d:IsA("UIGradient") and d.Name == "ButtonGrad" then
+        d.Color = colour
+      end
+    end
+  end)
+end
+
+-- 翻轉伺服器某 (rarity, kind) 的自動刪除，並依回傳值替原生按鈕上色（綠=開 / 紅=關）
+local function _applyAutoDelete(rarity, kind)
+  local AD = Scripttable.Summon.AutoDelete
+  local ok, ret = pcall(function()
+    return AD.Remote:InvokeServer(rarity, kind)
+  end)
+  if ok then
+    print(string.format("[AutoDelete] %s %s -> %s", rarity, kind, tostring(ret)))
+    _colourNativeToggle(rarity, kind, ret == true)
+  end
+end
+
+local function _syncAutoDelete()
+  local AD = Scripttable.Summon.AutoDelete
+  task.spawn(function()
+    for _, r in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
+      if AD.HIGH_TIER[r] then _applyAutoDelete(r, "Normal") end
+      if AD.HIGH_TIER["Shiny_" .. r] then _applyAutoDelete(r, "Shiny") end
+    end
+  end)
+end
+
+Mainfunction.SaveConfig = function()
+  for _, dir in ipairs({ "Tsetingnil_script", "Tsetingnil_script\\NTD", Scripttable.Localscript.ConfigDir }) do
+    if isfolder and makefolder and not isfolder(dir) then
+      pcall(makefolder, dir)
+    end
+  end
+  local ok, encoded = pcall(function()
+    return HttpService:JSONEncode(Scripttable.Summon.AutoDelete.HIGH_TIER)
+  end)
+  if not ok then
+    Msg:Warning(string.format(T.autodelete_save_fail, tostring(encoded)))
+    return false
+  end
+  local ok2, err = pcall(writefile, Scripttable.Localscript.ConfigPath, encoded)
+  if ok2 then
+    Msg:Success(T.autodelete_saved)
+    return true
+  end
+  Msg:Warning(string.format(T.autodelete_save_fail, tostring(err)))
+  return false
+end
+
+-- 讀取 AutoDelete.HIGH_TIER
+Mainfunction.LoadConfig = function(silent)
+  if not (isfile and readfile and isfile(Scripttable.Localscript.ConfigPath)) then
+    if not silent then Msg:Warning(T.autodelete_no_config) end
+    return false
+  end
+  local ok, raw = pcall(readfile, Scripttable.Localscript.ConfigPath)
+  if not ok or not raw or raw == "" then
+    if not silent then Msg:Warning(T.autodelete_no_config) end
+    return false
+  end
+  local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+  if not ok2 or type(data) ~= "table" then
+    if not silent then Msg:Warning(T.autodelete_no_config) end
+    return false
+  end
+  local HT = Scripttable.Summon.AutoDelete.HIGH_TIER
+  -- 只覆寫既有鍵，忽略檔案中的未知欄位
+  for key in pairs(HT) do
+    if type(data[key]) == "boolean" then
+      HT[key] = data[key]
+    end
+  end
+  if not silent then Msg:Success(T.autodelete_loaded) end
+  return true
+end
+
+Mainfunction.LoadConfig(true)
+
 local Row_SummonOptions = Tab_Summon:Row()
 
 Row_SummonOptions:Radiobox({
@@ -1053,6 +1203,68 @@ Row_SummonOptions:Radiobox({
   Callback = function(self, Value)
     Scripttable.Summon.notify.enable = Value
   end,
+})
+
+-- 自動刪除總開關（與跳過抽取動畫、通知同一 Row）
+Row_SummonOptions:Radiobox({
+  Value    = Scripttable.Summon.AutoDelete.enable,
+  Label    = T.autodelete_enable,
+  TextSize = radioTextSize,
+  Callback = function(self, Value)
+    Scripttable.Summon.AutoDelete.enable = Value
+    if not Scripttable.Summon.AutoDelete.UIReady then return end
+    _syncAutoDelete()
+    if Value then
+      Msg:Success(T.autodelete_applied)
+    else
+      Msg:Warning(T.autodelete_off)
+    end
+  end,
+})
+
+local AutoDeleteHeader = Tab_Summon:CollapsingHeader({
+  Title     = T.autodelete_header,
+  Collapsed = true,
+})
+
+local AutoDeleteTable = AutoDeleteHeader:Table({ MaxColumns = 2 })
+for _, rarity in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
+  local Row = AutoDeleteTable:NextRow()
+  -- 左欄：一般
+  Row:NextColumn():Radiobox({
+    Value    = Scripttable.Summon.AutoDelete.HIGH_TIER[rarity],
+    Label    = T["rarity_" .. rarity],
+    TextSize = radioTextSize,
+    Callback = function(self, Value)
+      Scripttable.Summon.AutoDelete.HIGH_TIER[rarity] = Value
+      if Scripttable.Summon.AutoDelete.enable then
+        task.spawn(_applyAutoDelete, rarity, "Normal")
+      end
+    end,
+  })
+  -- 右欄：閃亮
+  local shinyKey = "Shiny_" .. rarity
+  Row:NextColumn():Radiobox({
+    Value    = Scripttable.Summon.AutoDelete.HIGH_TIER[shinyKey],
+    Label    = T.rarity_shiny .. " " .. T["rarity_" .. rarity],
+    TextSize = radioTextSize,
+    Callback = function(self, Value)
+      Scripttable.Summon.AutoDelete.HIGH_TIER[shinyKey] = Value
+      if Scripttable.Summon.AutoDelete.enable then
+        task.spawn(_applyAutoDelete, rarity, "Shiny")
+      end
+    end,
+  })
+end
+
+local AutoDeleteBtns = AutoDeleteHeader:Row({ Expanded = true })
+AutoDeleteBtns:SmallButton({
+  Text     = T.autodelete_save,
+  Callback = function() Mainfunction.SaveConfig() end,
+})
+AutoDeleteBtns:SmallButton({
+  Text     = T.autodelete_load,
+  Callback = function() Mainfunction.LoadConfig() end,
 })
 
 Tab_Summon:Separator({ Text = T.pity_separator })
@@ -1178,9 +1390,18 @@ Mainfunction.BuildScriptList = function()
 					Border   = true,
 					Size     = UDim2.new(1, 0, 0, 150),
 				})
-				InfoModal:Button({
+				local BtnRow = InfoModal:Row({ Expanded = true })
+				BtnRow:Button({
 					Text     = T.localscript_info_close,
 					Callback = function() InfoModal:ClosePopup() end,
+				})
+				BtnRow:Button({
+					Text     = T.localscript_info_copy,
+					Callback = function()
+						if raw and pcall(setclipboard, raw) then
+							Msg:Success(T.localscript_info_copied)
+						end
+					end,
 				})
 			end,
 		})
@@ -1274,3 +1495,5 @@ Scripttable.Localscript.ScriptListTable = Tab_Localscript:Table({
 })
 
 Mainfunction.BuildScriptList()
+
+Scripttable.Summon.AutoDelete.UIReady = true

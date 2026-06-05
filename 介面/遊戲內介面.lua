@@ -74,6 +74,8 @@ local i18n = {
 		localscript_info_no_block  = "（無資訊區塊）",
 		localscript_info_read_fail = "讀取失敗",
 		localscript_info_close     = "關閉",
+		localscript_info_copy      = "複製",
+		localscript_info_copied    = "已複製到剪貼簿",
 		localscript_save_running    = "儲存正在運行的腳本",
 		localscript_save            = "儲存",
 		localscript_save_name_title = "輸入儲存名稱",
@@ -134,6 +136,8 @@ local i18n = {
 		localscript_info_no_block  = "(No info block)",
 		localscript_info_read_fail = "Read failed",
 		localscript_info_close     = "Close",
+		localscript_info_copy      = "Copy",
+		localscript_info_copied    = "Copied to clipboard",
 		localscript_save_running    = "Save Running Script",
 		localscript_save            = "Save",
 		localscript_save_name_title = "Enter Save Name",
@@ -501,9 +505,18 @@ BuildScriptList = function()
 					Border   = true,
 					Size     = UDim2.new(1, 0, 0, 150),
 				})
-				InfoModal:Button({
+				local BtnRow = InfoModal:Row({ Expanded = true })
+				BtnRow:Button({
 					Text     = L.localscript_info_close,
 					Callback = function() InfoModal:ClosePopup() end,
+				})
+				BtnRow:Button({
+					Text     = L.localscript_info_copy,
+					Callback = function()
+						if raw and pcall(setclipboard, raw) then
+							Msg:Success(L.localscript_info_copied)
+						end
+					end,
 				})
 			end,
 		})
