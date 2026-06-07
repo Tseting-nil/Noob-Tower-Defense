@@ -3,6 +3,14 @@ if not getgenv().NotificationModule then
 	loadstring(game:HttpGet("https://gist.githubusercontent.com/Tseting-nil/08653e6aa9fc12a9f097bfb10e6654e7/raw/00001d614d928fc5dafce59133a012dd78419afd/%25E5%2581%25B4%25E9%2582%258A%25E9%2580%259A%25E7%259F%25A5%25E6%25A8%25A1%25E7%25B5%2584.lua"))()
 end
 
+if not getgenv().MOVEAPI then
+  local MoveAPI = loadstring(game:HttpGet("https://gist.githubusercontent.com/Tseting-nil/494a4830fa6d3466596e4e01ca25bdee/raw/15a370f3f09720e1359601e05da6d9e0a24bcc23/%25E5%25B7%25A1%25E8%25B7%25AF%25E6%25A8%25A1%25E7%25B5%2584"))()
+  MoveAPI:SetJumpEnabled(false)
+  MoveAPI:SetDirectMovementDistance(500)
+  getgenv().MOVEAPI = MoveAPI
+end
+local Move = getgenv().MOVEAPI
+
 -- i18n
 local HttpService = game:GetService("HttpService")
 local currentLang = "zh"
@@ -40,6 +48,7 @@ local i18n = {
 		btnToggleAutoReplay = "控制自動重開",
 		btnManualReplay     = "手動重開",
 		btnLobby            = "回大廳",
+    AutoGetBooks   = "自動獲取怪物圖鑑",
 		noEnv          = "無環境",
 		cantLeave      = "遊戲限制未完成戰鬥無法離開",
 		stateReady     = "當前遊戲狀態：準備中",
@@ -83,6 +92,7 @@ local i18n = {
 		localscript_save_success    = "已儲存",
 		localscript_save_error      = "儲存失敗",
 		localscript_save_no_running = "無正在運行的腳本",
+		replayConfirm_title    = "確認手動重開?",
 		playCoinInit           = "金幣：---",
 		playGemInit            = "鑽石：---",
 		playCurrencyNotFound   = "找不到玩家貨幣資料，請確認已進入遊戲",
@@ -102,6 +112,7 @@ local i18n = {
 		btnToggleAutoReplay = "Toggle Auto Replay",
 		btnManualReplay     = "Replay",
 		btnLobby            = "To Lobby",
+    AutoGetBooks   = "AutoGetIndexBooks",
 		noEnv          = "No Environment",
 		cantLeave      = "Cannot leave mid-combat",
 		stateReady     = "Game State: Ready",
@@ -145,6 +156,7 @@ local i18n = {
 		localscript_save_success    = "Saved",
 		localscript_save_error      = "Save failed",
 		localscript_save_no_running = "No running script",
+		replayConfirm_title    = "Confirm Replay?",
 		playCoinInit           = "Coins: ---",
 		playGemInit            = "Gems: ---",
 		playCurrencyNotFound   = "Player currency data not found, please confirm you have entered the game",
@@ -166,7 +178,7 @@ local Mainfunction = nil
 
 local ReGui = loadstring(game:HttpGet("https://gist.githubusercontent.com/Tseting-nil/169b7303e1418cb301bad5ab427e9351/raw/93e90190f628387b545eef62b49e4ce146d1dad8/GUI:ReGui"))()
 
-local windowSize = currentLang == "en" and UDim2.new(0, 300, 0, 220) or UDim2.new(0, 250, 0, 220)
+local windowSize = currentLang == "en" and UDim2.new(0, 300, 0, 220) or UDim2.new(0, 300, 0, 250)
 
 local TabsWindow =  ReGui:TabsWindow({
 	Title = L.windowTitle,
@@ -273,10 +285,25 @@ ROW_QK:Button({
 ROW_QK:Button({
 	Text = L.btnManualReplay,
   TextSize = fontSize or 18,
-	Callback = function()
+	Callback = function(btn)
     if getgenv().NTDAPI then
-      Mainfunction.Queueload()
-			NTD_API.Replay()
+      local Popup = Tab_main:PopupModal({ RelativeTo = btn })
+      Popup:Separator({ Text = L.replayConfirm_title })
+      local PopupRow = Popup:Row({ Expanded = true })
+      PopupRow:Button({
+        Text = L.localscript_confirm_yes,
+        Callback = function()
+          Popup:ClosePopup()
+          Mainfunction.Queueload()
+          NTD_API.Replay()
+        end,
+      })
+      PopupRow:Button({
+        Text = L.localscript_confirm_no,
+        Callback = function()
+          Popup:ClosePopup()
+        end,
+      })
     else
       Msg:Warning(L.noEnv)
     end
@@ -360,6 +387,55 @@ task.spawn(function()
   end
 end)
 
+local AutoGetBooks = {
+  enable = false,
+  path = workspace.ClientIndexBooks,
+  CurrentTarget = nil,
+  Busy = false
+}
+
+local function ProcessNext()
+  if not AutoGetBooks.enable or AutoGetBooks.Busy then return end
+  -- 找下一個目標
+  local Target = AutoGetBooks.path:FindFirstChildWhichIsA("Model")
+  if not Target then return end
+  AutoGetBooks.CurrentTarget = Target
+  AutoGetBooks.Busy = true
+  task.spawn(function()
+    local Pos = Target:GetPivot().Position
+    pcall(Move.NavigateToPosition, Move, Pos.X, Pos.Y, Pos.Z)
+    -- 等待：停用 或 目標消失
+    repeat task.wait(0.5) until not AutoGetBooks.enable or not Target.Parent
+    AutoGetBooks.CurrentTarget = nil
+    AutoGetBooks.Busy = false
+    if AutoGetBooks.enable then ProcessNext() end
+  end)
+end
+
+AutoGetBooks.path.ChildAdded:Connect(ProcessNext)
+AutoGetBooks.path.ChildRemoved:Connect(function(Child)
+    if Child == AutoGetBooks.CurrentTarget then
+        AutoGetBooks.CurrentTarget = nil
+    end
+    ProcessNext()
+end)
+
+local AutoGetBooks = Tab_main:Radiobox({
+  Value = false,
+  Label = L.AutoGetBooks,
+  TextSize = fontSize or 16,
+  Disabled = false,
+  Callback = function(_, Value)
+    AutoGetBooks.enable = Value
+    if Value then
+      ProcessNext()
+    else
+      AutoGetBooks.CurrentTarget = nil
+      AutoGetBooks.Busy = false
+    end
+  end,
+})
+AutoGetBooks:SetValue(true)
 -- ========================================================================== --
 -- Tab_playinfo
 local play_coin = Tab_playinfo:Label({

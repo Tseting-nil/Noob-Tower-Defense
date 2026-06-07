@@ -42,8 +42,9 @@ local L = {
 	zh = {
 		title             = "大廳腳本",
 		tab_main          = "主頁",
-		tab_collect       = "收取",
+		tab_summon       = "抽取",
     tab_localscript   = "本地腳本管理",
+    tab_webhook       = "Webhook",
 		author            = "作者: Tseting-nil",
 		sep_auto_collect  = "自動領取",
 		sep_battlepass    = "戰鬥通行證",
@@ -74,6 +75,9 @@ local L = {
 		rarity_Rare          = "稀有",
 		rarity_Epic          = "史詩",
 		rarity_Legendary     = "傳奇",
+		rarity_Mythic        = "神話",
+		rarity_Secret        = "秘密",
+		rarity_Exclusive     = "獨家",
 		rarity_shiny         = "閃亮",
 		skip_enchant      = "跳過附魔等待",
 		block_popup       = "去除煩人的彈窗",
@@ -121,12 +125,62 @@ local L = {
 		auto_master        = "自動 Master",
 		msg_master_ok      = "%s → %s",
 		msg_master_fail    = "Master 失敗：%s",
+		-- Webhook 介面
+		webhook_url_input     = "輸入Webhook URL",
+		webhook_url_unset     = "未設定 Webhook URL",
+		webhook_url_label     = "Webhook URL: ",
+		webhook_sep_settings  = "設置",
+		webhook_master        = "總開關",
+		webhook_mode_indep    = "獨立發送",
+		webhook_mode_merge    = "合併發送",
+		webhook_test          = "測試發送",
+		webhook_send_stats    = "傳送統計",
+		webhook_clear_stats   = "清除統計",
+		webhook_sep_items     = "Webhook項目",
+		webhook_item_crate    = "通行證箱子 OP",
+		webhook_item_master   = "AutoMaster 完成",
+		webhook_summon_header = "抽取塔通知設定",
+		webhook_col_rarity    = "稀有度",
+		webhook_col_normal    = "正常",
+		webhook_col_inormal   = "獨立_正常",
+		webhook_col_shiny     = "閃亮",
+		webhook_col_ishiny    = "獨立_閃亮",
+		webhook_adv_header    = "進階設定",
+		webhook_bot_name      = "Bot 名稱",
+		webhook_cooldown      = "冷卻秒數",
+		webhook_sep_ping      = "頂級稀有 ping (@everyone)",
+		webhook_sep_config    = "設定檔",
+		webhook_save          = "儲存設定",
+		webhook_load          = "載入設定",
+		webhook_msg_no_url     = "尚未設定 Webhook URL",
+		webhook_msg_test       = "已送出測試（上線通知）",
+		webhook_msg_sent       = "已傳送總統計",
+		webhook_msg_cleared    = "已清除總統計",
+		webhook_msg_saved      = "已儲存 Webhook 設定",
+		webhook_msg_save_fail  = "Webhook 設定儲存失敗",
+		webhook_msg_no_config  = "找不到 Webhook 設定檔",
+		webhook_msg_bad_config = "Webhook 設定檔格式錯誤",
+		webhook_msg_loaded     = "已載入 Webhook 設定",
+		-- Webhook embed 內容（送進 Discord）
+		webhook_embed_summon   = "抽取結果",
+		webhook_embed_crate    = "通行證箱子 — 高級獎池 (OP)",
+		webhook_embed_item     = "物品",
+		webhook_embed_amount   = "數量",
+		webhook_embed_master   = "AutoMaster",
+		webhook_embed_join     = "上線通知",
+		webhook_embed_game     = "遊戲",
+		webhook_embed_total    = "總抽取次數：",
+		webhook_embed_deleted  = "(刪除)",
+		webhook_title_total    = "總統計",
+		webhook_title_run      = "本次抽取統計",
+		webhook_title_master   = "AutoMaster 統計",
 	},
 	en = {
 		title             = "Lobby Script",
 		tab_main          = "Main",
-		tab_collect       = "Collect",
+		tab_summon       = "Summon",
     tab_localscript   = "Local Script Manager",
+    tab_webhook       = "Webhook",
 		author            = "Author: Tseting-nil",
 		sep_auto_collect  = "Auto Collect",
 		sep_battlepass    = "Battle Pass",
@@ -157,6 +211,9 @@ local L = {
 		rarity_Rare          = "Rare",
 		rarity_Epic          = "Epic",
 		rarity_Legendary     = "Legendary",
+		rarity_Mythic        = "Mythic",
+		rarity_Secret        = "Secret",
+		rarity_Exclusive     = "Exclusive",
 		rarity_shiny         = "Shiny",
 		skip_enchant      = "Skip Enchant Wait",
 		block_popup       = "Block Annoying Popups",
@@ -203,6 +260,55 @@ local L = {
 		auto_master        = "Auto Master",
 		msg_master_ok      = "%s → %s",
 		msg_master_fail    = "Master failed: %s",
+		-- Webhook interface
+		webhook_url_input     = "Enter Webhook URL",
+		webhook_url_unset     = "Webhook URL not set",
+		webhook_url_label     = "Webhook URL: ",
+		webhook_sep_settings  = "Settings",
+		webhook_master        = "Master",
+		webhook_mode_indep    = "Independent",
+		webhook_mode_merge    = "Merged",
+		webhook_test          = "Test",
+		webhook_send_stats    = "Send Stats",
+		webhook_clear_stats   = "Clear Stats",
+		webhook_sep_items     = "Webhook Items",
+		webhook_item_crate    = "Battlepass Crate OP",
+		webhook_item_master   = "AutoMaster Done",
+		webhook_summon_header = "Summon Notify Settings",
+		webhook_col_rarity    = "Rarity",
+		webhook_col_normal    = "Normal",
+		webhook_col_inormal   = "Indep_Normal",
+		webhook_col_shiny     = "Shiny",
+		webhook_col_ishiny    = "Indep_Shiny",
+		webhook_adv_header    = "Advanced",
+		webhook_bot_name      = "Bot Name",
+		webhook_cooldown      = "Cooldown (s)",
+		webhook_sep_ping      = "Top-tier ping (@everyone)",
+		webhook_sep_config    = "Config File",
+		webhook_save          = "Save",
+		webhook_load          = "Load",
+		webhook_msg_no_url     = "Webhook URL not set",
+		webhook_msg_test       = "Test sent (join notification)",
+		webhook_msg_sent       = "Total stats sent",
+		webhook_msg_cleared    = "Total stats cleared",
+		webhook_msg_saved      = "Webhook config saved",
+		webhook_msg_save_fail  = "Webhook config save failed",
+		webhook_msg_no_config  = "Webhook config not found",
+		webhook_msg_bad_config = "Webhook config format error",
+		webhook_msg_loaded     = "Webhook config loaded",
+		-- Webhook embed content (sent to Discord)
+		webhook_embed_summon   = "Summon Result",
+		webhook_embed_crate    = "Battlepass Crate — Premium (OP)",
+		webhook_embed_item     = "Item",
+		webhook_embed_amount   = "Amount",
+		webhook_embed_master   = "AutoMaster",
+		webhook_embed_join     = "Online Notification",
+		webhook_embed_game     = "Game",
+		webhook_embed_total    = "Total pulls: ",
+		webhook_embed_deleted  = "(delete)",
+		webhook_title_total    = "Total Stats",
+		webhook_title_run      = "This Run Stats",
+		webhook_title_master   = "AutoMaster Stats",
 	},
 }
 local T = L[currentLang]
@@ -279,9 +385,187 @@ local Scripttable = {
     -- 自動刪除設定檔路徑
     ConfigDir  = [[Tsetingnil_script\NTD\Config]],
     ConfigPath = [[Tsetingnil_script\NTD\Config\Summon_AutoDelete.json]],
+    WebhookConfigPath = [[Tsetingnil_script\NTD\Config\lobby_Webhook_Config.json]],
+  },
+  Webhook = {
+    -- 常數 / 模組來源
+    Rarities      = { "Common", "Rare", "Epic", "Legendary", "Mythic", "Secret", "Exclusive" },
+    ShinyRarities = { Common = true, Rare = true, Epic = true, Legendary = true, Mythic = true, Secret = true },
+    TopRarities   = { Mythic = true, Secret = true, Exclusive = true },
+    UIRarities    = { "Common", "Rare", "Epic", "Legendary", "Mythic", "Secret" },
+    UIPing        = { "Mythic", "Secret" },
+    ModuleURL     = "https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/Webhook.lua",
+    ModulePaths   = {
+      "Tsetingnil_script/NTD/API/Webhook.lua",
+      "Tsetingnil_script\\NTD\\API\\Webhook.lua",
+    },
+    -- 狀態 / 設定
+    url      = "",
+    enabled  = false,  -- 總開關：關閉時所有自動發送都停止
+    merge    = true,   -- true=合併發送 / false=獨立即時
+    items    = { CrateOP = false, AutoMaster = false },
+    Summon   = {},     -- 每稀有度開關（下方 for 迴圈填入）
+    ping     = { Mythic = false, Secret = false, Exclusive = false },  -- 頂級稀有 @everyone
+    botName  = nil,
+    cooldown = 2,
+    buffer   = { master = {} },                 -- AutoMaster 合併緩衝
+    stats    = { total = 0, towers = {} },      -- 總統計（兩模式都累計；手動傳送/清除）
+    runStats = { total = 0, towers = {} },      -- 獨立計數（只合併；自動抽取停止時自動送+清）
+    UIReady  = false,
   }
 }
 local Mainfunction = {}
+
+-- ========================================================================== --
+-- Webhook 初始化（資料模型已在 Scripttable.Webhook 定義）
+-- 每稀有度開關初始化
+for _, r in ipairs(Scripttable.Webhook.Rarities) do
+  Scripttable.Webhook.Summon[r] = {
+    Normal = false, Shiny = false,
+    IndependentNormal = false, IndependentShiny = false,
+  }
+end
+
+-- 載入 Webhook 模組（優先 ModuleURL，否則本地檔；都失敗用空殼避免 UI 崩潰）
+local Webhook
+do
+  if getgenv().NTD_WebhookModule then
+    Webhook = getgenv().NTD_WebhookModule
+  else
+    local loaded
+    local url = Scripttable.Webhook.ModuleURL
+    if url ~= "" then
+      local ok, mod = pcall(function() return loadstring(game:HttpGet(url))() end)
+      if ok and type(mod) == "table" then loaded = mod end
+    end
+    if not loaded and isfile and readfile then
+      for _, p in ipairs(Scripttable.Webhook.ModulePaths) do
+        local okf = pcall(isfile, p)
+        if okf and isfile(p) then
+          local ok, mod = pcall(function() return loadstring(readfile(p))() end)
+          if ok and type(mod) == "table" then loaded = mod break end
+        end
+      end
+    end
+    Webhook = loaded
+    if Webhook then getgenv().NTD_WebhookModule = Webhook end
+  end
+end
+if type(Webhook) ~= "table" then
+  warn("[Webhook] 模組載入失敗，Webhook 功能停用")
+  Webhook = setmetatable({ Config = {}, Game = {} }, {
+    __index = function() return function() return false end end,
+  })
+end
+
+-- 把大廳的 i18n 稀有度名稱傳給模組（webhook 內容跟著語言走；塔名無翻譯維持原文）
+do
+  local rarityNames = {}
+  for _, r in ipairs(Scripttable.Webhook.Rarities) do
+    rarityNames[r] = T["rarity_" .. r] or r
+  end
+  Webhook:SetConfig({
+    rarityNames = rarityNames,
+    shinyLabel  = T.rarity_shiny or "閃亮",
+    Text = {  -- embed 內容翻譯
+      summon  = T.webhook_embed_summon,
+      crateOP = T.webhook_embed_crate,
+      item    = T.webhook_embed_item,
+      amount  = T.webhook_embed_amount,
+      master  = T.webhook_embed_master,
+      join    = T.webhook_embed_join,
+      game    = T.webhook_embed_game,
+      total   = T.webhook_embed_total,
+      deleted = T.webhook_embed_deleted,
+      session = T.webhook_title_total,
+    },
+  })
+end
+
+-- 計數工具：以 (稀有度+閃亮+塔名) 為單位累加到指定統計表
+local function _statAdd(s, rarity, shiny, tower)
+  s.total = s.total + 1
+  local key = (shiny and "S|" or "N|") .. tostring(rarity) .. "|" .. tostring(tower)
+  local rec = s.towers[key]
+  if not rec then
+    rec = { rarity = rarity, shiny = shiny, tower = tower, count = 0 }
+    s.towers[key] = rec
+  end
+  rec.count = rec.count + 1
+end
+
+-- 每抽計數：總統計(兩模式都算)；獨立計數(只合併模式)
+local function _webhookStat(rarity, shiny, tower)
+  local W = Scripttable.Webhook
+  _statAdd(W.stats, rarity, shiny, tower)
+  if W.merge then _statAdd(W.runStats, rarity, shiny, tower) end
+end
+
+-- 即時提醒條件：獨立通知(任何模式) 或 獨立發送模式 + 正常/閃亮
+local function _webhookShouldSend(rarity, shiny)
+  local cfg = Scripttable.Webhook.Summon[rarity]
+  if not cfg then return false end
+  if shiny then
+    if cfg.IndependentShiny then return true end
+    if (not Scripttable.Webhook.merge) and cfg.Shiny then return true end
+  else
+    if cfg.IndependentNormal then return true end
+    if (not Scripttable.Webhook.merge) and cfg.Normal then return true end
+  end
+  return false
+end
+
+-- 自動刪除標記：有開自動刪除且該 (稀有度,閃亮) 在刪除清單 → 統計行加「(刪除)」
+local function _webhookMarkDelete(rarity, shiny)
+  local AD = Scripttable.Summon.AutoDelete
+  if not (AD and AD.enable) then return false end
+  local key = shiny and ("Shiny_" .. rarity) or rarity
+  return AD.HIGH_TIER[key] == true
+end
+
+-- 合併模式：自動抽取停止 → 送出「獨立計數」，送出成功才清空（總統計不動）
+local function _webhookFlushRun()
+  local W = Scripttable.Webhook
+  if (W.runStats.total or 0) <= 0 then return end
+  if Webhook:SendSessionSummary(W.runStats, { title = T.webhook_title_run, markDelete = _webhookMarkDelete }) then
+    W.runStats = { total = 0, towers = {} }
+  end
+end
+
+-- 處理 AutoMaster 完成（不進統計；維持原本即時/緩衝）
+local function _webhookHandleMaster(tower, mastery)
+  local W = Scripttable.Webhook
+  if not W.enabled then return end
+  if not W.items.AutoMaster then return end
+  if W.merge then
+    table.insert(W.buffer.master, { tower = tower, mastery = mastery })
+  else
+    Webhook:SendMaster({ { tower = tower, mastery = mastery } })
+  end
+end
+
+local function _webhookFlushMaster()
+  local W = Scripttable.Webhook
+  if #W.buffer.master == 0 then return end
+  local batch = W.buffer.master
+  W.buffer.master = {}
+  Webhook:SendMaster(batch, { title = T.webhook_title_master .. " (" .. #batch .. ")" })
+end
+
+-- 監看自動程序停止 → 合併模式自動送「獨立計數」、AutoMaster 緩衝沖出
+task.spawn(function()
+  local prevSummon, prevMaster = false, false
+  while true do
+    local nowSummon = Scripttable.Summon.AutoRunning == true
+    local nowMaster = Scripttable.AutoMaster == true
+    if Scripttable.Webhook.enabled then
+      if prevSummon and not nowSummon then _webhookFlushRun() end
+      if prevMaster and not nowMaster then _webhookFlushMaster() end
+    end
+    prevSummon, prevMaster = nowSummon, nowMaster
+    task.wait(0.5)
+  end
+end)
 
 Mainfunction.turntable = function()
   local SpinWheel = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Events"):WaitForChild("SpinWheel")
@@ -492,6 +776,7 @@ Mainfunction.AutoMaster = function()
 						if _updateUnitsInfo then pcall(_updateUnitsInfo) end
 						if _updateUnitsList then pcall(_updateUnitsList) end
 						Msg:Success(string.format(T.msg_master_ok, data.Tower, nextData.Name))
+						_webhookHandleMaster(data.Tower, nextData.Name)
 					else
 						Msg:Warning(string.format(T.msg_master_fail, data.Tower))
 					end
@@ -543,24 +828,50 @@ game:GetService("RunService").Heartbeat:Connect(function()
 			end
 		end
 		local n = Scripttable.Summon.notify
-		if n.enable and type(result) == "table" then
+		if type(result) == "table" then
+			local W = Scripttable.Webhook
+			local wbImmediate, wbOrder, wbPing = {}, {}, false
 			for _, entry in ipairs(result) do
 				local tower    = entry.tower or "?"
 				local shiny    = entry.shiny == true
 				local rarity   = _getRarity(tower)
-				local rarityHit = n.HIGH_TIER[rarity] == true
-				local shinyHit  = shiny and n.NOTIFY_SHINY
-				if rarityHit or shinyHit then
-					local displayName = _formatTowerName(tower)
-					local label
-					if shiny then
-						label = string.format(T.summon_notify_shiny, rarity, displayName)
-					else
-						label = string.format(T.summon_notify_rarity, rarity, displayName)
+
+				-- 螢幕通知
+				if n.enable then
+					local rarityHit = n.HIGH_TIER[rarity] == true
+					local shinyHit  = shiny and n.NOTIFY_SHINY
+					if rarityHit or shinyHit then
+						local displayName = _formatTowerName(tower)
+						local label
+						if shiny then
+							label = string.format(T.summon_notify_shiny, rarity, displayName)
+						else
+							label = string.format(T.summon_notify_rarity, rarity, displayName)
+						end
+						print("[Summon Notify] " .. label)
+						Msg:Success(label)
 					end
-					print("[Summon Notify] " .. label)
-					Msg:Success(label)
 				end
+
+				-- Webhook 統計（含塔名）
+				_webhookStat(rarity, shiny, tower)
+
+				-- Webhook 即時提醒：獨立通知(任何模式) 或 獨立發送+正常/閃亮；同批同塔合併 ×N
+				if W.enabled and _webhookShouldSend(rarity, shiny) then
+					local key = (shiny and "S|" or "N|") .. rarity .. "|" .. tower
+					local rec = wbImmediate[key]
+					if not rec then
+						rec = { tower = tower, rarity = rarity, shiny = shiny, count = 0 }
+						wbImmediate[key] = rec
+						wbOrder[#wbOrder + 1] = rec
+					end
+					rec.count = rec.count + 1
+					if W.ping[rarity] then wbPing = true end
+				end
+			end
+			-- 整批一次送出（重複的塔以 ×N 呈現，不拆成多則）
+			if #wbOrder > 0 then
+				Webhook:SendSummon(wbOrder, { ping = wbPing })
 			end
 		end
 	end
@@ -588,7 +899,8 @@ _oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 				task.spawn(function()
 					local SkipBtn = UI.Frames.Enchanting.Tabs.Container.Info.Container.Info.Buttons.Skip
 					local t = 0
-					repeat task.wait(0.1); t += 0.1 until SkipBtn.Visible or t >= 10
+					repeat task.wait(0.1)
+t += 0.1 until SkipBtn.Visible or t >= 10
 					if SkipBtn.Visible then
 						firesignal(SkipBtn.Button.Activated)
 					end
@@ -662,6 +974,9 @@ Mainfunction.Gamepass_DrawBox = function()
 			end
 			Msg:Success(string.format(T.msg_op_reward, itemName, amount))
 			print("[DrawBox] 高級獎池 抽取到 " .. itemName .. " " .. amount)
+			if Scripttable.Webhook.enabled and Scripttable.Webhook.items.CrateOP then
+				Webhook:SendCrateOP(itemName, amount)
+			end
 		end
 
 		task.wait(Scripttable.Gamepass.Drawspeed)
@@ -709,8 +1024,9 @@ local Tabs = {}
 
 for _, Name in ipairs({
 	T.tab_main,
-	T.tab_collect,
-  T.tab_localscript
+	T.tab_summon,
+  T.tab_localscript,
+  T.tab_webhook
 }) do
 	local Tab = TabsWindow:CreateTab({
 		Name = Name
@@ -750,6 +1066,11 @@ local Tab_Summon = Tabs[2]:ScrollingCanvas({
 local Tab_Localscript = Tabs[3]:ScrollingCanvas({
 	Fill = true,
 	UiPadding = UDim.new(0, 0)
+})
+
+local Tab_Webhook = Tabs[4]:ScrollingCanvas({
+  Fill = true,
+  UiPadding = UDim.new(0, 0)
 })
 
 Tab_main:Label({
@@ -1293,7 +1614,8 @@ Mainfunction.BuildScriptList = function()
 				local excluded = false
 				for _, suffix in ipairs(Scripttable.Localscript.Excluded) do
 					if name:match(suffix .. "%.lua$") or name:match(suffix .. "%.txt$") then
-						excluded = true; break
+						excluded = true
+break
 					end
 				end
 				if not excluded then
@@ -1496,4 +1818,335 @@ Scripttable.Localscript.ScriptListTable = Tab_Localscript:Table({
 
 Mainfunction.BuildScriptList()
 
+-- ========================================================================== --
+-- Tab_Webhook
+local W = Scripttable.Webhook
+
+-- 遮罩 URL（顯示用）
+Mainfunction.maskWebhook = function(url)
+  local id, token = url:match("https://discord%.com/api/webhooks/(%d+)/(.+)")
+  if id and token then
+    return id:sub(1, 4) .. "..." .. id:sub(-4) .. " / " .. token:sub(1, 4) .. "..." .. token:sub(-4)
+  end
+  -- 非 Discord URL：通用遮罩，避免整串密鑰顯示在面板
+  if #url <= 16 then return url end
+  return url:sub(1, 12) .. "..." .. url:sub(-6)
+end
+
+-- 設定存檔
+Mainfunction.SaveWebhookConfig = function(silent)
+  for _, dir in ipairs({ "Tsetingnil_script", "Tsetingnil_script\\NTD", "Tsetingnil_script\\NTD\\Config" }) do
+    if isfolder and makefolder and not isfolder(dir) then pcall(makefolder, dir) end
+  end
+  local snap = {
+    url = W.url, enabled = W.enabled, merge = W.merge,
+    items = W.items, Summon = W.Summon, ping = W.ping,
+    botName = W.botName, cooldown = W.cooldown,
+  }
+  local ok, encoded = pcall(function() return HttpService:JSONEncode(snap) end)
+  if not ok then
+    if not silent then Msg:Warning(T.webhook_msg_save_fail) end
+    return false
+  end
+  local ok2, err = pcall(writefile, Scripttable.Localscript.WebhookConfigPath, encoded)
+  if ok2 then
+    if not silent then Msg:Success(T.webhook_msg_saved) end
+    return true
+  end
+  if not silent then Msg:Warning(T.webhook_msg_save_fail .. ": " .. tostring(err)) end
+  return false
+end
+
+-- 設定載入（只覆寫既有鍵，忽略檔案中的未知欄位）
+Mainfunction.LoadWebhookConfig = function(silent)
+  if not (isfile and readfile and isfile(Scripttable.Localscript.WebhookConfigPath)) then
+    if not silent then Msg:Warning(T.webhook_msg_no_config) end
+    return false
+  end
+  local ok, raw = pcall(readfile, Scripttable.Localscript.WebhookConfigPath)
+  if not ok or not raw or raw == "" then
+    if not silent then Msg:Warning(T.webhook_msg_no_config) end
+    return false
+  end
+  local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+  if not ok2 or type(data) ~= "table" then
+    if not silent then Msg:Warning(T.webhook_msg_bad_config) end
+    return false
+  end
+  if type(data.url)      == "string"  then W.url      = data.url end
+  if type(data.enabled)  == "boolean" then W.enabled  = data.enabled end
+  if type(data.merge)    == "boolean" then W.merge    = data.merge end
+  if type(data.botName)  == "string"  then W.botName  = data.botName end
+  if type(data.cooldown) == "number"  then W.cooldown = data.cooldown end
+  if type(data.items) == "table" then
+    for k in pairs(W.items) do
+      if type(data.items[k]) == "boolean" then W.items[k] = data.items[k] end
+    end
+  end
+  if type(data.ping) == "table" then
+    for k in pairs(W.ping) do
+      if type(data.ping[k]) == "boolean" then W.ping[k] = data.ping[k] end
+    end
+  end
+  if type(data.Summon) == "table" then
+    for r, cfg in pairs(W.Summon) do
+      local d = data.Summon[r]
+      if type(d) == "table" then
+        for key in pairs(cfg) do
+          if type(d[key]) == "boolean" then cfg[key] = d[key] end
+        end
+      end
+    end
+  end
+  -- 套用到模組
+  Webhook:SetURL(W.url)
+  Webhook:SetConfig({
+    botName    = W.botName,
+    cooldown   = W.cooldown,
+  })
+  if not silent then Msg:Success(T.webhook_msg_loaded) end
+  return true
+end
+
+-- 啟動時嘗試載入
+Mainfunction.LoadWebhookConfig(true)
+
+-- URL 狀態 + 輸入
+local function _webhookStatusText()
+  return (W.url ~= "" and (T.webhook_url_label .. Mainfunction.maskWebhook(W.url))) or T.webhook_url_unset
+end
+
+local Webhook_Lable = Tab_Webhook:Label({ Text = _webhookStatusText() })
+
+local Webhook_InputText = Tab_Webhook:InputText({
+  Value       = W.url,
+  Label       = T.webhook_url_input,
+  Placeholder = "https://discord.com/api/webhooks/...",
+  Callback    = function(self, text)
+    W.url = text
+    Webhook:SetURL(text)
+    Webhook_Lable.Text = _webhookStatusText()
+  end,
+})
+
+-- 設置
+Tab_Webhook:Separator({ Text = T.webhook_sep_settings })
+
+-- 第一排：總開關 + 模式（獨立 / 合併 互斥）
+local Row_Webhook_Mode = Tab_Webhook:Row()
+local Webhook_Toggle = Row_Webhook_Mode:Radiobox({
+  Value    = W.enabled,
+  Label    = T.webhook_master,
+  TextSize = radioTextSize,
+  Callback = function(self, Value) W.enabled = Value end,
+})
+
+local _modeGuard = false
+local Radio_Indep, Radio_Merge
+
+local function _setMode(merge)
+  if _modeGuard then return end
+  _modeGuard = true
+  W.merge = merge
+  W.runStats = { total = 0, towers = {} }  -- 換模式重置獨立計數
+  if Radio_Indep then Radio_Indep:SetValue(not merge) end
+  if Radio_Merge then Radio_Merge:SetValue(merge) end
+  _modeGuard = false
+end
+Radio_Indep = Row_Webhook_Mode:Radiobox({
+  Value    = not W.merge,
+  Label    = T.webhook_mode_indep,
+  TextSize = radioTextSize,
+  Callback = function(self, v) if not _modeGuard then _setMode(not v) end end,
+})
+Radio_Merge = Row_Webhook_Mode:Radiobox({
+  Value    = W.merge,
+  Label    = T.webhook_mode_merge,
+  TextSize = radioTextSize,
+  Callback = function(self, v) if not _modeGuard then _setMode(v) end end,
+})
+
+-- 第二排：測試發送 / 傳送統計 / 清除統計（皆只看 URL，不受總開關限制）
+local Row_Webhook_Act = Tab_Webhook:Row()
+Row_Webhook_Act:Button({
+  Text = T.webhook_test,
+  Callback = function()
+    if not Webhook:IsValid() then
+      Msg:Warning(T.webhook_msg_no_url)
+      return
+    end
+    if Webhook:Test() then
+      Msg:Success(T.webhook_msg_test)
+    end
+  end,
+})
+Row_Webhook_Act:Button({
+  Text = T.webhook_send_stats,
+  Callback = function()
+    if not Webhook:IsValid() then
+      Msg:Warning(T.webhook_msg_no_url)
+      return
+    end
+    if Webhook:SendSessionSummary(W.stats, { title = T.webhook_title_total, markDelete = _webhookMarkDelete }) then
+      Msg:Success(T.webhook_msg_sent)
+    end
+  end,
+})
+Row_Webhook_Act:Button({
+  Text = T.webhook_clear_stats,
+  Callback = function()
+    W.stats = { total = 0, towers = {} }
+    Msg:Success(T.webhook_msg_cleared)
+  end,
+})
+
+-- Webhook 項目
+Tab_Webhook:Separator({ Text = T.webhook_sep_items })
+local ROW_Webhook_Send = Tab_Webhook:Row()
+local Item_CrateOP = ROW_Webhook_Send:Radiobox({
+  Value    = W.items.CrateOP,
+  Label    = T.webhook_item_crate,
+  TextSize = radioTextSize,
+  Callback = function(self, Value) W.items.CrateOP = Value end,
+})
+local Item_AutoMaster = ROW_Webhook_Send:Radiobox({
+  Value    = W.items.AutoMaster,
+  Label    = T.webhook_item_master,
+  TextSize = radioTextSize,
+  Callback = function(self, Value) W.items.AutoMaster = Value end,
+})
+
+-- 抽取塔通知設定（下拉表：稀有度 × 4 開關）
+local SummonHeader = Tab_Webhook:CollapsingHeader({ Title = T.webhook_summon_header, Collapsed = true })
+local SummonTable  = SummonHeader:Table({ RowBackground = true, Border = true })
+
+local HRow = SummonTable:HeaderRow()
+HRow:Column():Label({ Text = T.webhook_col_rarity })
+HRow:Column():Label({ Text = T.webhook_col_normal })
+HRow:Column():Label({ Text = T.webhook_col_inormal })
+HRow:Column():Label({ Text = T.webhook_col_shiny })
+HRow:Column():Label({ Text = T.webhook_col_ishiny })
+
+local SummonCtrls = {}
+for _, rarity in ipairs(W.UIRarities) do
+  local cfg      = W.Summon[rarity]
+  local hasShiny = W.ShinyRarities[rarity] == true
+  local Row      = SummonTable:NextRow()
+  local ctrls    = {}
+  SummonCtrls[rarity] = ctrls
+
+  Row:Column():Label({ Text = (T["rarity_" .. rarity] or rarity) })
+
+  -- 正常
+  ctrls.Normal = Row:Column():Radiobox({
+    Value = cfg.Normal, Label = "",
+    Callback = function(self, v) cfg.Normal = v end,
+  })
+
+  -- 獨立_正常
+  ctrls.IndependentNormal = Row:Column():Radiobox({
+    Value = cfg.IndependentNormal, Label = "",
+    Callback = function(self, v) cfg.IndependentNormal = v end,
+  })
+
+  -- 閃亮
+  local shinyCol = Row:Column()
+  if hasShiny then
+    ctrls.Shiny = shinyCol:Radiobox({
+      Value = cfg.Shiny, Label = "",
+      Callback = function(self, v) cfg.Shiny = v end,
+    })
+  else
+    shinyCol:Label({ Text = "—" })
+  end
+
+  -- 獨立_閃亮
+  local indShinyCol = Row:Column()
+  if hasShiny then
+    ctrls.IndependentShiny = indShinyCol:Radiobox({
+      Value = cfg.IndependentShiny, Label = "",
+      Callback = function(self, v) cfg.IndependentShiny = v end,
+    })
+  else
+    indShinyCol:Label({ Text = "—" })
+  end
+end
+
+-- 進階設定
+local AdvHeader = Tab_Webhook:CollapsingHeader({ Title = T.webhook_adv_header, Collapsed = true })
+
+local Adv_Bot = AdvHeader:InputText({
+  Value    = W.botName or "",
+  Label    = T.webhook_bot_name,
+  Callback = function(self, t)
+    W.botName = (t ~= "" and t) or nil
+    Webhook:SetConfig({ botName = (t ~= "" and t) or "Tseting Script" })
+  end,
+})
+local Adv_Cooldown = AdvHeader:SliderInt({
+  Label    = T.webhook_cooldown,
+  Value    = W.cooldown,
+  Minimum  = 0,
+  Maximum  = 10,
+  Format   = "%d s",
+  Callback = function(self, v)
+    W.cooldown = v
+    Webhook:SetConfig({ cooldown = v })
+  end,
+})
+
+AdvHeader:Separator({ Text = T.webhook_sep_ping })
+local PingCtrls = {}
+local PingRow = AdvHeader:Row()
+for _, r in ipairs(W.UIPing) do
+  PingCtrls[r] = PingRow:Radiobox({
+    Value    = W.ping[r],
+    Label    = (T["rarity_" .. r] or r),
+    TextSize = radioTextSize,
+    Callback = function(self, v) W.ping[r] = v end,
+  })
+end
+
+-- 載入後把所有 UI 控件刷新成目前 W 值（免重載腳本）
+local function _webhookRefreshUI()
+  Webhook_InputText:SetValue(W.url)
+  Webhook_Toggle:SetValue(W.enabled)
+  -- 模式：用 guard 直接設值，避免觸發 _setMode 重置獨立計數
+  _modeGuard = true
+  Radio_Indep:SetValue(not W.merge)
+  Radio_Merge:SetValue(W.merge)
+  _modeGuard = false
+  Item_CrateOP:SetValue(W.items.CrateOP)
+  Item_AutoMaster:SetValue(W.items.AutoMaster)
+  for rarity, c in pairs(SummonCtrls) do
+    local cfg = W.Summon[rarity]
+    if c.Normal            then c.Normal:SetValue(cfg.Normal) end
+    if c.Shiny             then c.Shiny:SetValue(cfg.Shiny) end
+    if c.IndependentNormal then c.IndependentNormal:SetValue(cfg.IndependentNormal) end
+    if c.IndependentShiny  then c.IndependentShiny:SetValue(cfg.IndependentShiny) end
+  end
+  for r, c in pairs(PingCtrls) do c:SetValue(W.ping[r]) end
+  Adv_Bot:SetValue(W.botName or "")
+  Adv_Cooldown:SetValue(W.cooldown)
+end
+
+-- 共用儲存/載入（載入會刷新所有 UI 控件，免重載腳本）
+Tab_Webhook:Separator({ Text = T.webhook_sep_config })
+local Webhook_SaveRow = Tab_Webhook:Row({ Expanded = true })
+Webhook_SaveRow:SmallButton({
+  Text = T.webhook_save,
+  Callback = function() Mainfunction.SaveWebhookConfig() end,
+})
+Webhook_SaveRow:SmallButton({
+  Text = T.webhook_load,
+  Callback = function()
+    if Mainfunction.LoadWebhookConfig() then _webhookRefreshUI() end
+  end,
+})
+
+
+-- ========================================================================== --
+-- 初始化
+
 Scripttable.Summon.AutoDelete.UIReady = true
+Scripttable.Webhook.UIReady = true

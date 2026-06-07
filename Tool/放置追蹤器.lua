@@ -3173,6 +3173,18 @@ local function InitTracker()
 		print("[NTD Tracker] hookmetamethod OK ")
 
 		-- === 載入塔能力資料 ===
+		local _getid = getthreadidentity or getidentity or get_thread_identity
+		local _setid = setthreadidentity or setidentity or set_thread_identity
+		local _oldId = 8
+		if _getid then
+			local _okId, _id = pcall(_getid)
+			if _okId and type(_id) == "number" then
+				_oldId = _id
+			end
+		end
+		if _setid then
+			pcall(_setid, 2)
+		end
 		local Modules = ReplicatedStorage:FindFirstChild("Modules")
 		local Data = Modules and Modules:FindFirstChild("Data")
 		if Data then
@@ -3189,14 +3201,17 @@ local function InitTracker()
 				end
 			end)
 		end
-
-		-- 建立 towersWithAbility 索引
-		local nameList = type(TowersData.getTowerNames) == "function" and TowersData.getTowerNames() or {}
-		for _, towerName in ipairs(nameList) do
-			local keys = fetchAbilityKeys(towerName)
-			if #keys > 0 then
-				towersWithAbility[towerName] = keys
+		pcall(function()
+			local nameList = type(TowersData.getTowerNames) == "function" and TowersData.getTowerNames() or {}
+			for _, towerName in ipairs(nameList) do
+				local keys = fetchAbilityKeys(towerName)
+				if #keys > 0 then
+					towersWithAbility[towerName] = keys
+				end
 			end
+		end)
+		if _setid then
+			pcall(_setid, _oldId)
 		end
 		if next(towersWithAbility) then
 			print("[NTD Tracker] Tower ability index built")
