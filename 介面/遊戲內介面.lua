@@ -389,13 +389,13 @@ end)
 
 local AutoGetBooks = {
   enable = false,
-  path = workspace.ClientIndexBooks,
+  path = workspace:FindFirstChild("ClientIndexBooks"), -- 用 FindFirstChild，遊戲移除此物件時不會在載入時 throw
   CurrentTarget = nil,
   Busy = false
 }
 
 local function ProcessNext()
-  if not AutoGetBooks.enable or AutoGetBooks.Busy then return end
+  if not AutoGetBooks.enable or AutoGetBooks.Busy or not AutoGetBooks.path then return end
   -- 找下一個目標
   local Target = AutoGetBooks.path:FindFirstChildWhichIsA("Model")
   if not Target then return end
