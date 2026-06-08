@@ -98,6 +98,15 @@ local i18n = {
 		playCurrencyNotFound   = "找不到玩家貨幣資料，請確認已進入遊戲",
 		playCoinFmt            = "金幣：%d",
 		playGemFmt             = "鑽石：%d",
+		tab_settings              = "設置",
+		keyTimeLabel              = "密鑰剩餘時間：",
+		keyTimePerm               = "永久",
+		keyExpired                = "已過期",
+		unitDay = "天", unitHour = "時", unitMin = "分",
+		instantUpdate             = "自動更新",
+		onText = "開", offText = "關",
+		instantUpdateConfirmTitle = "確認關閉自動更新？",
+		instantUpdateConfirmDesc  = "關閉後主腳本只會在『大廳』更新，掛機中途不會被打斷。",
 	},
 	en = {
 		windowTitle    = "In-Game UI",
@@ -162,6 +171,15 @@ local i18n = {
 		playCurrencyNotFound   = "Player currency data not found, please confirm you have entered the game",
 		playCoinFmt            = "Coins: %d",
 		playGemFmt             = "Gems: %d",
+		tab_settings              = "Settings",
+		keyTimeLabel              = "Key time left: ",
+		keyTimePerm               = "Permanent",
+		keyExpired                = "Expired",
+		unitDay = "d", unitHour = "h", unitMin = "m",
+		instantUpdate             = "Auto Update",
+		onText = "ON", offText = "OFF",
+		instantUpdateConfirmTitle = "Disable auto update?",
+		instantUpdateConfirmDesc  = "When off, the main script only updates in the LOBBY — farming won't be interrupted.",
 	},
 }
 
@@ -178,6 +196,8 @@ local Mainfunction = nil
 
 local ReGui = loadstring(game:HttpGet("https://gist.githubusercontent.com/Tseting-nil/169b7303e1418cb301bad5ab427e9351/raw/93e90190f628387b545eef62b49e4ce146d1dad8/GUI:ReGui"))()
 
+local UserInputService = game:GetService("UserInputService")
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local windowSize = currentLang == "en" and UDim2.new(0, 300, 0, 220) or UDim2.new(0, 300, 0, 250)
 
 local TabsWindow =  ReGui:TabsWindow({
@@ -191,7 +211,8 @@ local Tabs = {}
 for _, Name in ipairs({
 	L.tab_main,
   L.tab_playinfo,
-  L.tab_localscript
+  L.tab_localscript,
+  L.tab_settings
 }) do
 	local Tab = TabsWindow:CreateTab({
 		Name = Name
@@ -226,6 +247,96 @@ local Tab_Localscript = Tabs[3]:ScrollingCanvas({
 	Fill = true,
 	UiPadding = UDim.new(0, 0)
 })
+
+local Tab_settings = Tabs[4]:ScrollingCanvas({
+	Fill = true,
+	UiPadding = UDim.new(0, 0)
+})
+
+-- ===== 設置分頁：密鑰剩餘時間 + 即時更新開關 =====
+local SETTINGS_API_VAR = "Tsetingnil_script/NTD/API_VAR.json"
+
+local function readApiVarTable()
+	local ok, data = pcall(function()
+		if isfile and readfile and isfile(SETTINGS_API_VAR) then
+			return HttpService:JSONDecode(readfile(SETTINGS_API_VAR))
+		end
+	end)
+	return (ok and type(data) == "table") and data or {}
+end
+
+local function writeInstantUpdate(value)
+	pcall(function()
+		if not writefile then return end
+		local data = readApiVarTable()
+		data.instant_update = value and true or false
+		writefile(SETTINGS_API_VAR, HttpService:JSONEncode(data))
+	end)
+end
+
+-- 由 loader 寫入 API_VAR 的 expires_at(秒) 計算剩餘時間文字
+local function fmtKeyRemaining()
+	local exp = tonumber(readApiVarTable().expires_at)
+	if not exp then return L.keyTimeLabel .. L.keyTimePerm end
+	if exp > 1e10 then exp = math.floor(exp / 1000) end -- 毫秒→秒
+	local left = exp - os.time()
+	if left <= 0 then return L.keyTimeLabel .. L.keyExpired end
+	local d = math.floor(left / 86400)
+	local h = math.floor((left % 86400) / 3600)
+	local m = math.floor((left % 3600) / 60)
+	return string.format("%s%d%s %d%s %d%s", L.keyTimeLabel, d, L.unitDay, h, L.unitHour, m, L.unitMin)
+end
+
+Tab_settings:Separator({ Text = L.tab_settings })
+
+local KeyTime_Label = Tab_settings:Label({
+	Text = fmtKeyRemaining(),
+	TextSize = fontSize or 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+-- 自動更新開關(Radiobox)：預設關(只在大廳更新)；關閉時彈二級確認
+local InstantUpdate_Box
+local _instantBoxReady = false
+InstantUpdate_Box = Tab_settings:Radiobox({
+	Value = readApiVarTable().instant_update == true, -- 預設 false
+	Label = L.instantUpdate,
+	TextSize = fontSize or 16,
+	Callback = function(_, Value)
+		if not _instantBoxReady then return end -- 略過建構期的初始回呼
+		if Value then
+			-- 開啟自動更新(關卡內也即時更新)
+			writeInstantUpdate(true)
+		else
+			-- 關閉 → 二級確認；取消則還原為開
+			local Popup = Tab_settings:PopupModal({})
+			Popup:Separator({ Text = L.instantUpdateConfirmTitle })
+			Popup:Label({
+				Text = L.instantUpdateConfirmDesc,
+				TextSize = fontSize or 14,
+				NoTheme = true,
+				TextColor3 = Color3.fromRGB(230, 230, 230),
+			})
+			local PopupRow = Popup:Row({ Expanded = true })
+			PopupRow:Button({
+				Text = L.localscript_confirm_yes,
+				Callback = function()
+					Popup:ClosePopup()
+					writeInstantUpdate(false)
+				end,
+			})
+			PopupRow:Button({
+				Text = L.localscript_confirm_no,
+				Callback = function()
+					Popup:ClosePopup()
+					InstantUpdate_Box:SetValue(true) -- 取消 → 還原為開
+				end,
+			})
+		end
+	end,
+})
+_instantBoxReady = true
 
 Tab_main:Separator({
 	Text = L.sectionStatus
@@ -383,6 +494,7 @@ task.spawn(function()
       API_Check_Label.Text = L.envNotExist
       AutoReplay_Label.Text = L.noEnv
     end
+    pcall(function() KeyTime_Label.Text = fmtKeyRemaining() end)
     task.wait(1)
   end
 end)
@@ -466,7 +578,7 @@ end)
 -- ========================================================================== --
 -- Tab_Localscript
 local Localscript = {
-  path = [[Tsetingnil_script\NTD\Script]],
+  path = "Tsetingnil_script/NTD/Script", -- 用正斜線：腳本以 / 路徑儲存，部分手機執行器不會正規化 \
   ScriptListTable = nil,
   Excluded = {"_Venus", "_Saturn", "_Mars"},
 }
@@ -574,13 +686,7 @@ BuildScriptList = function()
 					content = L.localscript_info_read_fail
 				end
 				local InfoModal = TabsWindow:PopupModal({ Title = script.name })
-				InfoModal:Console({
-					Value    = content,
-					ReadOnly = true,
-					RichText = true,
-					Border   = true,
-					Size     = UDim2.new(1, 0, 0, 150),
-				})
+				-- 按鈕列放在 Console 上方：手機端 Console 過高會把下方按鈕擠出視窗，置頂可確保可見
 				local BtnRow = InfoModal:Row({ Expanded = true })
 				BtnRow:Button({
 					Text     = L.localscript_info_close,
@@ -593,6 +699,13 @@ BuildScriptList = function()
 							Msg:Success(L.localscript_info_copied)
 						end
 					end,
+				})
+				InfoModal:Console({
+					Value    = content,
+					ReadOnly = true,
+					RichText = true,
+					Border   = true,
+					Size     = UDim2.new(1, 0, 0, isMobile and 110 or 150),
 				})
 			end,
 		})
@@ -730,13 +843,7 @@ HeaderRow:Button({
 		end
 		local scriptTitle = "main_" .. userId
 		local InfoModal = TabsWindow:PopupModal({ Title = scriptTitle })
-		InfoModal:Console({
-			Value    = content,
-			ReadOnly = true,
-			RichText = true,
-			Border   = true,
-			Size     = UDim2.new(1, 0, 0, 150),
-		})
+		-- 按鈕列置頂，Console 放下方並在手機端降低高度，避免按鈕被擠出視窗
 		local BtnRow = InfoModal:Row({ Expanded = true })
 		BtnRow:Button({
 			Text = L.localscript_save,
@@ -798,6 +905,13 @@ HeaderRow:Button({
 		BtnRow:Button({
 			Text = L.localscript_info_close,
 			Callback = function() InfoModal:ClosePopup() end,
+		})
+		InfoModal:Console({
+			Value    = content,
+			ReadOnly = true,
+			RichText = true,
+			Border   = true,
+			Size     = UDim2.new(1, 0, 0, isMobile and 110 or 150),
 		})
 	end,
 })

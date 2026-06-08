@@ -312,6 +312,8 @@ local L = {
 	},
 }
 local T = L[currentLang]
+local isMobile = game:GetService("UserInputService").TouchEnabled
+	and not game:GetService("UserInputService").KeyboardEnabled
 local radioTextSize = currentLang == "en" and 14 or 16
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -379,7 +381,7 @@ local Scripttable = {
 	blockFavouritePrompt = true,
   Skip_Enchanting = false,
   Localscript = {
-    path = [[Tsetingnil_script\NTD\Script]],
+    path = "Tsetingnil_script/NTD/Script", -- 用正斜線：腳本以 / 路徑儲存，部分手機執行器不會正規化 \
     Excluded = {"_Venus", "_Saturn", "_Mars"},
     ScriptListTable = nil,
     -- 自動刪除設定檔路徑
@@ -1705,13 +1707,7 @@ break
 					content = T.localscript_info_read_fail
 				end
 				local InfoModal = TabsWindow:PopupModal({ Title = script.name })
-				InfoModal:Console({
-					Value    = content,
-					ReadOnly = true,
-					RichText = true,
-					Border   = true,
-					Size     = UDim2.new(1, 0, 0, 150),
-				})
+				-- 按鈕列放在 Console 上方：手機端 Console 過高會把下方按鈕擠出視窗，置頂可確保可見
 				local BtnRow = InfoModal:Row({ Expanded = true })
 				BtnRow:Button({
 					Text     = T.localscript_info_close,
@@ -1724,6 +1720,13 @@ break
 							Msg:Success(T.localscript_info_copied)
 						end
 					end,
+				})
+				InfoModal:Console({
+					Value    = content,
+					ReadOnly = true,
+					RichText = true,
+					Border   = true,
+					Size     = UDim2.new(1, 0, 0, isMobile and 110 or 150),
 				})
 			end,
 		})

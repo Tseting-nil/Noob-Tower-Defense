@@ -120,6 +120,7 @@ local Lang = {
 		lblSaveMode = "儲存模式",
 		saveMerged = "合併",
 		saveSeparate = "分離",
+		lblPhase2Name = "指定加載名稱（前綴）",
 		logNoOps = "⚠️ 沒有可生成的操作記錄",
 		logSaved = "✅ 已儲存: %s",
 		logSavedPhase2 = "✅ 已儲存 Phase2: %s",
@@ -200,6 +201,7 @@ local Lang = {
 		lblSaveMode = "Save Mode",
 		saveMerged = "Merged",
 		saveSeparate = "Separate",
+		lblPhase2Name = "Phase2 Load Name (prefix)",
 		logNoOps = "⚠️ No operations recorded",
 		logSaved = "✅ Saved: %s",
 		logSavedPhase2 = "✅ Saved Phase2: %s",
@@ -273,9 +275,28 @@ local function bindText(obj, key, prop)
 	})
 end
 
+-- 即時讀取 AutoSkipWave。快取物件失效時（遊戲開局會重建 Settings 值，舊物件 Changed 不再觸發、
+-- Value 停在舊值）自動依路徑重抓，避免顯示/偵測錯誤。回傳明確 boolean，修正「Value=false 時誤用 fallback」的舊 bug。
+local function readAutoSkipWave()
+	local v = AutoSkipWaveValue
+	if not v or not v.Parent then
+		local S = ReplicatedStorage:FindFirstChild("Values")
+		S = S and S:FindFirstChild("Settings")
+		local nv = S and S:FindFirstChild("AutoSkipWave")
+		if nv then
+			AutoSkipWaveValue = nv
+			v = nv
+		end
+	end
+	if v then
+		return v.Value == true
+	end
+	return autoSkipState.on == true
+end
+
 local function updateInfoLabel()
 	if infoLabel then
-		local on = AutoSkipWaveValue and AutoSkipWaveValue.Value or autoSkipState.on
+		local on = readAutoSkipWave()
 		local skipText = on and T("toggleOn") or T("toggleOff")
 		infoLabel.Text =
 			T("infoFmt"):format(gameSettings.mapId, gameSettings.difficulty, gameSettings.modifier, skipText)
@@ -365,7 +386,7 @@ local function startGameTimer(mapId)
 	gameStartTime = tick()
 	isGameRunning = true
 	gameStartMapId = mapId or gameSettings.mapId
-	gameStartAutoSkipWave = AutoSkipWaveValue and AutoSkipWaveValue.Value or false
+	gameStartAutoSkipWave = readAutoSkipWave()
 	return true
 end
 
@@ -947,6 +968,40 @@ do
 end
 bindText(fileNameInput, "phFileName", "PlaceholderText")
 
+-- 指定加載名稱（前綴）：僅雙地圖 + 分離模式顯示；生成的 Phase1 用它 AddMapWait("<前綴>")
+local phase2NameLabel = Instance.new("TextLabel")
+phase2NameLabel.Size = UDim2.new(1, -20, 0, 20)
+phase2NameLabel.Position = UDim2.new(0, 10, 0, 158)
+phase2NameLabel.BackgroundTransparency = 1
+phase2NameLabel.TextColor3 = Theme.TextDim
+phase2NameLabel.Font = Theme.Font
+phase2NameLabel.TextSize = Theme.SizeNormal
+phase2NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+phase2NameLabel.Visible = false
+phase2NameLabel.ZIndex = 12
+phase2NameLabel.Parent = saveFrame
+bindText(phase2NameLabel, "lblPhase2Name")
+
+local phase2NameInput = Instance.new("TextBox")
+phase2NameInput.Size = UDim2.new(1, -20, 0, 32)
+phase2NameInput.Position = UDim2.new(0, 10, 0, 180)
+phase2NameInput.BackgroundColor3 = Theme.SurfaceHighlight
+phase2NameInput.PlaceholderColor3 = Theme.TextDim
+phase2NameInput.Text = ""
+phase2NameInput.TextColor3 = Theme.Text
+phase2NameInput.Font = Theme.Font
+phase2NameInput.TextSize = Theme.SizeNormal
+phase2NameInput.BorderSizePixel = 0
+phase2NameInput.ClearTextOnFocus = false
+phase2NameInput.Visible = false
+phase2NameInput.ZIndex = 12
+phase2NameInput.Parent = saveFrame
+do
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 6)
+	c.Parent = phase2NameInput
+end
+
 local saveModeRow = Instance.new("Frame")
 saveModeRow.Size = UDim2.new(1, -20, 0, 28)
 saveModeRow.Position = UDim2.new(0, 10, 0, 122)
@@ -1001,6 +1056,7 @@ end
 bindText(saveSeparateBtn, "saveSeparate")
 
 local currentSaveMode = "merged"
+local relayoutSavePanel -- forward declaration（在 saveBtnContainer 建立後賦值）
 
 local function updateSaveModeButtons()
 	if currentSaveMode == "merged" then
@@ -1019,10 +1075,12 @@ end
 saveMergedBtn.MouseButton1Click:Connect(function()
 	currentSaveMode = "merged"
 	updateSaveModeButtons()
+	if relayoutSavePanel then relayoutSavePanel() end
 end)
 saveSeparateBtn.MouseButton1Click:Connect(function()
 	currentSaveMode = "separate"
 	updateSaveModeButtons()
+	if relayoutSavePanel then relayoutSavePanel() end
 end)
 
 local saveBtnContainer = Instance.new("Frame")
@@ -1036,6 +1094,29 @@ do
 	l.FillDirection = Enum.FillDirection.Horizontal
 	l.Padding = UDim.new(0, 10)
 	l.Parent = saveBtnContainer
+end
+
+-- 依「是否雙地圖 / 合併或分離」重新排版存檔面板，並調整面板高度
+relayoutSavePanel = function()
+	local hasTransition = mapTransitionLog[1] ~= nil
+	saveModeRow.Visible = hasTransition
+	local showPhase2 = hasTransition and currentSaveMode == "separate"
+	phase2NameLabel.Visible = showPhase2
+	phase2NameInput.Visible = showPhase2
+
+	local y = 122
+	if hasTransition then
+		saveModeRow.Position = UDim2.new(0, 10, 0, y)
+		y = y + 36
+	end
+	if showPhase2 then
+		phase2NameLabel.Position = UDim2.new(0, 10, 0, y)
+		phase2NameInput.Position = UDim2.new(0, 10, 0, y + 22)
+		y = y + 22 + 32 + 12
+	end
+	saveBtnContainer.Position = UDim2.new(0, 10, 0, y)
+	local wx = UISizes.saveFrame.X
+	saveFrame.Size = UDim2.new(wx.Scale, wx.Offset, 0, y + 55)
 end
 
 local confirmSaveBtn = Instance.new("TextButton")
@@ -1612,16 +1693,14 @@ local function openSavePanel()
 	)
 	defaultName = defaultName:gsub("[^%w_%-]", "_")
 	fileNameInput.Text = defaultName
+	phase2NameInput.Text = defaultName -- 指定加載名稱預設帶主檔名（前綴）
 
 	local hasTransition = mapTransitionLog[1] ~= nil
-	saveModeRow.Visible = hasTransition
-	if hasTransition then
-		saveBtnContainer.Position = UDim2.new(0, 10, 0, 160)
-	else
+	if not hasTransition then
 		currentSaveMode = "merged"
 		updateSaveModeButtons()
-		saveBtnContainer.Position = UDim2.new(0, 10, 0, 130)
 	end
+	relayoutSavePanel()
 
 	saveFrame.Visible = true
 end
@@ -2192,7 +2271,17 @@ local function generateScript(mode)
 			end
 		end
 		table.insert(fullLines, "")
-		table.insert(fullLines, "\tNTD.AddMapWait() -- wait for map change, reset phase2 timer")
+		-- 分離模式（mode=="phase1"）用「指定加載名稱」讓 Phase1 精準載入對應 Phase2；其餘維持原樣
+		if mode == "phase1" then
+			local p2 = phase2NameInput.Text:gsub("[^%w_%-]", "_")
+			if p2 ~= "" then
+				table.insert(fullLines, string.format('\tNTD.AddMapWait("%s") -- load Phase2 by prefix: %s_<map>', p2, p2))
+			else
+				table.insert(fullLines, "\tNTD.AddMapWait() -- wait for map change, reset phase2 timer")
+			end
+		else
+			table.insert(fullLines, "\tNTD.AddMapWait() -- wait for map change, reset phase2 timer")
+		end
 		if mode ~= "phase1" then
 			table.insert(fullLines, "")
 			table.insert(
@@ -2640,7 +2729,10 @@ confirmSaveBtn.MouseButton1Click:Connect(function()
 		local mainOk = mainScript and saveScriptToFile(fileName, mainScript)
 		if mainOk then
 			if phase2Script then
-				local p2Name = fileName .. "_" .. transition.toMap
+				-- Phase2 檔名前綴用「指定加載名稱」（與 Phase1 的 AddMapWait 前綴一致），預設=主檔名
+				local p2Prefix = phase2NameInput.Text:gsub("[^%w_%-]", "_")
+				if p2Prefix == "" then p2Prefix = fileName end
+				local p2Name = p2Prefix .. "_" .. transition.toMap
 				saveScriptToFile(p2Name, phase2Script)
 				addLog(T("logSavedPhase2"):format(p2Name), Theme.Accent)
 			end
@@ -3066,7 +3158,7 @@ local function InitTracker()
 		end
 
 		NamecallHandlers.FireServer.SkipWave = function(_, _, result)
-			if AutoSkipWaveValue and AutoSkipWaveValue.Value then
+			if readAutoSkipWave() then
 				return result
 			end
 
