@@ -1982,19 +1982,22 @@ end
 local function writeOp(lines, op)
 	local rawE = op.elapsed or 0
 	local e = timeRoundUp and (math.ceil(rawE * 10) / 10) or (math.floor(rawE * 10) / 10)
-	-- 閘門參數：成本版=文字 "cost"（place/upgrade 用實際成本，其餘 "0" 立即）；時間版=數字 e
-	local opCost = 0
-	if op.type == "place" then
-		opCost = (op.info and op.info.cost) or 0
-	elseif op.type == "upgrade" then
-		opCost = op.cost or 0
+	-- 閘門參數：成本版僅 place/upgrade 用字串閘門（等金錢）；其餘操作不花錢，用數字閘門（等時間）
+	local isCostGated = ScriptSettings.CostMode and (op.type == "place" or op.type == "upgrade")
+	local gate, tag
+	if isCostGated then
+		local opCost = 0
+		if op.type == "place" then
+			opCost = (op.info and op.info.cost) or 0
+		elseif op.type == "upgrade" then
+			opCost = op.cost or 0
+		end
+		gate = string.format('"%d"', math.max(0, math.floor(opCost + 0.5)))
+		tag = "$" .. tostring(math.max(0, math.floor(opCost + 0.5)))
+	else
+		gate = string.format("%.1f", e)
+		tag = string.format("+%.1fs", e)
 	end
-	local gate = ScriptSettings.CostMode
-		and string.format('"%d"', math.max(0, math.floor(opCost + 0.5)))
-		or string.format("%.1f", e)
-	local tag = ScriptSettings.CostMode
-		and ("$" .. tostring(math.max(0, math.floor(opCost + 0.5))))
-		or string.format("+%.1fs", e)
 
 	if op.type == "place" then
 		local info = op.info
@@ -3115,10 +3118,11 @@ local function InitTracker()
 					orderToInfo[nextOrder] = info
 					idToOrder[result.id] = nextOrder
 
-					addLog(
-						T("logPlaceTower"):format(nextOrder, towerName .. getMutLabel(placeUUID), elapsed),
-						Color3.fromRGB(100, 255, 100)
-					)
+					local placeLogText = T("logPlaceTower"):format(nextOrder, towerName .. getMutLabel(placeUUID), elapsed)
+					if ScriptSettings.CostMode and info.cost and info.cost > 0 then
+						placeLogText = placeLogText .. string.format("  $%d", info.cost)
+					end
+					addLog(placeLogText, Color3.fromRGB(100, 255, 100))
 					nextOrder += 1
 					pcall(onAbilityPlaceTower, towerName, result.id)
 				else
@@ -3161,7 +3165,11 @@ local function InitTracker()
 				end
 
 				if info then
-					addLog(T("logUpgrade"):format(info.order, info.UnitType, elapsed), Color3.fromRGB(255, 255, 100))
+					local upLogText = T("logUpgrade"):format(info.order, info.UnitType, elapsed)
+					if ScriptSettings.CostMode and upEntry.cost and upEntry.cost > 0 then
+						upLogText = upLogText .. string.format("  $%d", upEntry.cost)
+					end
+					addLog(upLogText, Color3.fromRGB(255, 255, 100))
 				else
 					addLog(T("logUpgradeUnknown"):format(idStr, elapsed), Color3.fromRGB(255, 200, 100))
 				end
