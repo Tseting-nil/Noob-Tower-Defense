@@ -55,7 +55,45 @@ local gameSettings = {
 local ScriptSettings = {
 	AutoReplay = true,
 	RecordSpecialMutation = false,
+	CostMode = true, -- true=錄「成本版」(Add* 閘門用消耗字串、無時間)；false=時間版
 }
+
+-- === 金錢追蹤（成本版錄製用）===
+local currentMoney = 0
+local function readMoneyNow()
+	local ok, value = pcall(function()
+		local leaderstats = Players.LocalPlayer:FindFirstChild("leaderstats")
+		local coins = leaderstats and leaderstats:FindFirstChild("Coins")
+		return coins and coins.Value
+	end)
+	return ok and tonumber(value) or nil
+end
+task.spawn(function()
+	while true do
+		local m = readMoneyNow()
+		if m then currentMoney = m end
+		task.wait(0.1)
+	end
+end)
+-- 取動作後金錢的「最大單次下降」當成本：扣款是一次大跌，收入每幀微小不影響。
+-- before 需是動作前的精確值；短窗(0.6s)降低與下一個動作的捕捉重疊。
+local function captureCost(record, before)
+	task.spawn(function()
+		local prev = before or readMoneyNow() or currentMoney
+		local biggest = 0
+		local t0 = tick()
+		while tick() - t0 < 0.6 do
+			task.wait(0.03)
+			local now = readMoneyNow()
+			if now then
+				local d = prev - now
+				if d > biggest then biggest = d end
+				prev = now
+			end
+		end
+		record.cost = math.max(0, math.floor(biggest + 0.5))
+	end)
+end
 
 -- === 腳本生成設定 ===
 local timeRoundUp = false
@@ -63,7 +101,7 @@ local customComment = ""
 local script_SpeedMultiplier = 1
 local autoScrollEnabled = true
 local SCRIPT_SAVE_PATH = "Tsetingnil_script/NTD/Script"
-local NTD_API_URL = "https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/%E5%AF%86%E9%91%B0%E7%B3%BB%E7%B5%B1.lua"
+local NTD_API_URL = "http://127.0.0.1:8000/NTD_API_TEST"
 
 -- === 語言設定 ===
 local currentLang = "en"
@@ -114,6 +152,8 @@ local Lang = {
 		lblAutoReplay = "自動重播 (AutoReplay)",
 		lblRecordMutation = "記錄全部突變附魔",
 		lblRecordMutationDesc = "開啟後腳本將記錄塔的所有附魔/突變（停用時僅記錄閃亮塔）",
+		lblCostMode = "成本版錄製（無時間）",
+		lblCostModeDesc = "開啟後生成腳本用消耗($)當閘門、錢夠才動作；對收入/難度差異更穩，適合掛機重播",
 		lblFileName = "輸入腳本名稱:",
 		phFileName = "輸入腳本名稱...",
 		infoFmt = "地圖: %s\n難易度: %s\n效果: %s\n自動跳波: %s",
@@ -195,6 +235,8 @@ local Lang = {
 		lblAutoReplay = "Auto Replay",
 		lblRecordMutation = "Record All Mutations & Enchants",
 		lblRecordMutationDesc = "Includes all tower enchants/mutations in scripts (Shiny is always recorded)",
+		lblCostMode = "Cost-based recording (no time)",
+		lblCostModeDesc = "Generated script gates by cost ($) instead of time; robust to income/difficulty differences, ideal for AFK replay",
 		lblFileName = "Script name:",
 		phFileName = "Enter script name...",
 		infoFmt = "Map: %s\nDifficulty: %s\nModifier: %s\nAuto Skip: %s",
@@ -1540,6 +1582,10 @@ createToggle("lblRecordMutation", paramScrollFrame, 15, ScriptSettings.RecordSpe
 	ScriptSettings.RecordSpecialMutation = v
 end, "lblRecordMutationDesc")
 
+createToggle("lblCostMode", paramScrollFrame, 16, ScriptSettings.CostMode, function(v)
+	ScriptSettings.CostMode = v
+end, "lblCostModeDesc")
+
 -- ============================================================
 -- 拖移功能
 -- ============================================================
@@ -1896,6 +1942,20 @@ end
 local function writeOp(lines, op)
 	local rawE = op.elapsed or 0
 	local e = timeRoundUp and (math.ceil(rawE * 10) / 10) or (math.floor(rawE * 10) / 10)
+	-- 閘門參數：成本版=文字 "cost"（place/upgrade 用實際成本，其餘 "0" 立即）；時間版=數字 e
+	local opCost = 0
+	if op.type == "place" then
+		opCost = (op.info and op.info.cost) or 0
+	elseif op.type == "upgrade" then
+		opCost = op.cost or 0
+	end
+	local gate = ScriptSettings.CostMode
+		and string.format('"%d"', math.max(0, math.floor(opCost + 0.5)))
+		or string.format("%.1f", e)
+	local tag = ScriptSettings.CostMode
+		and ("$" .. tostring(math.max(0, math.floor(opCost + 0.5))))
+		or string.format("+%.1fs", e)
+
 	if op.type == "place" then
 		local info = op.info
 		local x = info.Position and info.Position.X or 0
@@ -1903,71 +1963,33 @@ local function writeOp(lines, op)
 		local z = info.Position and info.Position.Z or 0
 		local pdata = info.UUID and towerUUIDData[info.UUID]
 		local condArg = (pdata and pdata.mutations and pdata.mutations["Shiny"] == true) and ', "Shiny"' or ""
-		table.insert(
-			lines,
-			string.format(
-				'\tNTD.AddPlaceTower("%s", %.3f, %.3f, %.3f, 0, %.1f%s) -- #%d +%.1fs',
-				info.UnitType,
-				x,
-				y,
-				z,
-				e,
-				condArg,
-				info.Index,
-				e
-			)
-		)
+		table.insert(lines, string.format(
+			'\tNTD.AddPlaceTower("%s", %.3f, %.3f, %.3f, 0, %s%s) -- #%d %s',
+			info.UnitType, x, y, z, gate, condArg, info.Index, tag))
 	elseif op.type == "upgrade" then
 		if op.order then
-			table.insert(
-				lines,
-				string.format("\tNTD.AddUpgradeTower(%d, %.1f) -- #%d +%.1fs", op.order, e, op.order, e)
-			)
+			table.insert(lines, string.format("\tNTD.AddUpgradeTower(%d, %s) -- #%d %s", op.order, gate, op.order, tag))
 		else
-			table.insert(
-				lines,
-				string.format("\t-- WARN: upgrade untracked tower [ID:%s] +%.1fs", tostring(op.gameId), e)
-			)
+			table.insert(lines, string.format("\t-- WARN: upgrade untracked tower [ID:%s] %s", tostring(op.gameId), tag))
 		end
 	elseif op.type == "sell" then
 		if op.order then
-			table.insert(lines, string.format("\tNTD.AddSellTower(%d, %.1f) -- #%d +%.1fs", op.order, e, op.order, e))
+			table.insert(lines, string.format("\tNTD.AddSellTower(%d, %s) -- #%d %s", op.order, gate, op.order, tag))
 		else
-			table.insert(lines, string.format("\t-- WARN: sell untracked tower [ID:%s] +%.1fs", tostring(op.gameId), e))
+			table.insert(lines, string.format("\t-- WARN: sell untracked tower [ID:%s] %s", tostring(op.gameId), tag))
 		end
 	elseif op.type == "skipwave" then
-		table.insert(lines, string.format("\tNTD.AddSkipWave(%.1f) -- +%.1fs", e, e))
+		table.insert(lines, string.format("\tNTD.AddSkipWave(%s) -- %s", gate, tag))
 	elseif op.type == "speed" then
-		table.insert(lines, string.format("\tNTD.AddSetSpeed(%d, %.1f) -- Speed %dx +%.1fs", op.speed, e, op.speed, e))
+		table.insert(lines, string.format("\tNTD.AddSetSpeed(%d, %s) -- Speed %dx %s", op.speed, gate, op.speed, tag))
 	elseif op.type == "towerability" then
 		if op.order then
-			table.insert(
-				lines,
-				string.format(
-					'\tNTD.AddTowerAbility(%d, "%s", %.1f) -- #%d +%.1fs',
-					op.order,
-					op.abilityName,
-					e,
-					op.order,
-					e
-				)
-			)
+			table.insert(lines, string.format('\tNTD.AddTowerAbility(%d, "%s", %s) -- #%d %s', op.order, op.abilityName, gate, op.order, tag))
 		else
-			table.insert(
-				lines,
-				string.format(
-					"\t-- WARN: towerability untracked tower [ID:%s] %s +%.1fs",
-					tostring(op.gameId),
-					op.abilityName,
-					e
-				)
-			)
+			table.insert(lines, string.format("\t-- WARN: towerability untracked tower [ID:%s] %s %s", tostring(op.gameId), op.abilityName, tag))
 		end
 	elseif op.type == "gamesetting" then
-		table.insert(
-			lines,
-			string.format('\tNTD.AddGameSetting("%s", %s, %.1f) -- +%.1fs', op.name, tostring(op.value), e, e)
-		)
+		table.insert(lines, string.format('\tNTD.AddGameSetting("%s", %s, %s) -- %s', op.name, tostring(op.value), gate, tag))
 	end
 end
 
@@ -1990,6 +2012,7 @@ local function buildOperations()
 			order = up.order,
 			elapsed = up.elapsed or 0,
 			gameId = up.gameId,
+			cost = up.cost,
 		})
 	end
 	for _, sl in ipairs(sellLog) do
@@ -2258,7 +2281,8 @@ local function generateScript(mode)
 	table.insert(fullLines, "")
 	table.insert(
 		fullLines,
-		string.format('\tNTD.AddGameSetting("AutoSkipWave", %s, 0)', tostring(gameStartAutoSkipWave))
+		string.format('\tNTD.AddGameSetting("AutoSkipWave", %s, %s)', tostring(gameStartAutoSkipWave),
+			ScriptSettings.CostMode and '"0"' or "0")
 	)
 	table.insert(fullLines, "")
 
@@ -3012,6 +3036,7 @@ local function InitTracker()
 			local towerName = (type(placeArgs) == "table" and placeArgs.towerToPlace) or "Unknown"
 			local targetPos = (type(placeArgs) == "table" and placeArgs.position) or nil
 			local placeUUID = (type(placeArgs) == "table" and placeArgs.towerID) or nil
+			local moneyBefore = readMoneyNow() or currentMoney -- 同步抓動作前精確金錢（成本版）
 
 			queueHookTask(function()
 				if not isGameRunning then
@@ -3038,6 +3063,7 @@ local function InitTracker()
 
 					orderToInfo[nextOrder] = info
 					idToOrder[result.id] = nextOrder
+					captureCost(info, moneyBefore) -- 成本版：抓這次放置的消耗
 
 					addLog(
 						T("logPlaceTower"):format(nextOrder, towerName .. getMutLabel(placeUUID), elapsed),
@@ -3056,6 +3082,7 @@ local function InitTracker()
 		NamecallHandlers.InvokeServer.UpgradeTower = function(_, args, result)
 			local towerId = tonumber(args[1])
 			local idStr = args[1]
+			local moneyBefore = readMoneyNow() or currentMoney -- 同步抓動作前精確金錢（成本版）
 
 			queueHookTask(function()
 				if result ~= true or not isGameRunning then
@@ -3066,11 +3093,13 @@ local function InitTracker()
 				local info = order and orderToInfo[order]
 				local elapsed = getElapsed()
 
-				table.insert(upgradeLog, {
+				local upEntry = {
 					gameId = towerId,
 					order = order,
 					elapsed = elapsed,
-				})
+				}
+				table.insert(upgradeLog, upEntry)
+				captureCost(upEntry, moneyBefore) -- 成本版：抓這次升級的消耗
 
 				if info then
 					addLog(T("logUpgrade"):format(info.order, info.UnitType, elapsed), Color3.fromRGB(255, 255, 100))

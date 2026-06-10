@@ -1,326 +1,512 @@
-# NTD API Usage Guide 
-- By Claude Code
+# NTD API Usage Guide
 
-> Game: Roblox *Noob Tower Defense* (PlaceId `131658557901126`)
-> Global object after loading: `getgenv().NTD` (flag `getgenv().NTDAPI = true`)
+> Game: Roblox *Noob Tower Defense*
+>
+> Lobby PlaceId: `127758462685845`
+>
+> In-game PlaceId: `131658557901126`
+>
+> Global object after load: `getgenv().NTD`, flag: `getgenv().NTDAPI = true`
 
-NTD is an automation framework for the tower-defense game. It auto-initializes the right resources based on **where you currently are**, split into **Lobby mode** and **In-Game mode**. After loading the script, just call the `NTD.*` functions.
+NTD is an automation API for Noob Tower Defense. After loading, it detects the current PlaceId and initializes either lobby resources or in-game resources automatically. You only need to call `NTD.*` functions.
 
----
-
-## Table of Contents
-
-1. [Loading & Startup](#1-loading--startup)
-2. [Scene Detection](#2-scene-detection)
-3. [Lobby Functions](#3-lobby-functions)
-4. [In-Game: Operation Queue](#4-in-game-operation-queue)
-5. [In-Game: Direct Control](#5-in-game-direct-control)
-6. [Settings](#6-settings)
-7. [Queue Timing Queries](#7-queue-timing-queries)
-8. [Multi-Phase Maps (Phase 2)](#8-multi-phase-maps-phase-2)
-9. [Auto-Retry Mechanism](#9-auto-retry-mechanism)
-10. [Full Example](#10-full-example)
-11. [Quick Reference](#11-quick-reference)
+This document follows `API/完整_正式版.lua`.
 
 ---
 
-## 1. Loading & Startup
+## Contents
 
-API: you must pass the **Key System** verification first before using this service:
+1. [Loading & Language](#1-loading--language)
+2. [Teleport Resume](#2-teleport-resume)
+3. [Scene Detection](#3-scene-detection)
+4. [Lobby API](#4-lobby-api)
+5. [Equip API](#5-equip-api)
+6. [In-Game Queue API](#6-in-game-queue-api)
+7. [Direct In-Game Control](#7-direct-in-game-control)
+8. [Phase 2 Maps](#8-phase-2-maps)
+9. [Settings & Queries](#9-settings--queries)
+10. [Retry & Safety](#10-retry--safety)
+11. [Complete Example](#11-complete-example)
+12. [Quick Reference](#12-quick-reference)
+
+---
+
+## 1. Loading & Language
+
+The API is loaded after the key system verification succeeds:
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/%E5%AF%86%E9%91%B0%E7%B3%BB%E7%B5%B1.lua"))()
 ```
 
+After loading:
 
-Flow:
+```lua
+getgenv().NTD
+getgenv().NTDAPI = true
+```
 
-**Once verified, the API auto-loads into the local environment**, creating `getgenv().NTD` (console prints `[NTD] API loaded`)
+Language is read from:
 
-After loading, the API auto-detects whether you are in the lobby or in a level and initializes the matching resources — no manual init needed. Then just call `NTD.*`.
+```text
+Tsetingnil_script/NTD/API_VAR.json
+```
 
-### Language
-
-On startup it reads `Tsetingnil_script/NTD/API_VAR.json`:
+English output:
 
 ```json
 { "language": "English" }
 ```
 
-- `language` = `"English"` → English output
-- anything else / file missing → Chinese (default)
-
-### Auto-Resume Across Teleports
-
-Lobby → level is a Roblox teleport, which wipes script memory. The framework handles this with `queue_on_teleport`:
-
-1. In the **lobby**, call `NTD.SaveLocalScript(<your in-game script>)` to save the script that should run inside the level to
-   `Tsetingnil_script/NTD/main_<YourUserId>.lua`
-2. Trigger the teleport (`SelectMap` injects the resume logic automatically)
-3. Once in the level, the framework `loadfile`s and runs your saved script again
-
-> The framework also has **disconnect detection**: if it sees CoreGui's ErrorPrompt it auto-reinjects the resume script (requires an executor that supports `queue_on_teleport`).
+Any other value, or a missing file, defaults to Chinese output.
 
 ---
 
-## 2. Scene Detection
+## 2. Teleport Resume
+
+When Roblox teleports from lobby to game, the running script memory is cleared. NTD resumes automation by combining `queue_on_teleport` with a local script file.
+
+Recommended flow:
+
+1. In the lobby, call `NTD.SaveLocalScript(scriptContent)`.
+2. The API saves it to `Tsetingnil_script/NTD/main_<UserId>.lua`.
+3. Call `NTD.SelectMap(...)`.
+4. When teleport starts, the API injects the resume loader.
+5. In the game place, it runs `loadfile("Tsetingnil_script/NTD/main_<UserId>.lua")()`.
+
+In the lobby or an unknown PlaceId, the resume loader shows a confirmation dialog. It auto-confirms when the countdown ends. In the in-game PlaceId, it resumes directly.
+
+The API also watches CoreGui disconnect prompts. When a disconnect prompt appears, it reinjects the resume loader. This requires an executor with `queue_on_teleport` support.
+
+---
+
+## 3. Scene Detection
 
 | Function | Returns | Description |
-|---|---|---|
-| `NTD.IsLobby()` | boolean | Whether you are in the lobby |
-| `NTD.IsInGame()` | boolean | Whether you are inside a level |
+|---|---:|---|
+| `NTD.IsLobby()` | boolean | Whether the current PlaceId is the lobby |
+| `NTD.IsInGame()` | boolean | Whether the current PlaceId is the in-game place |
 
 ---
 
-## 3. Lobby Functions (lobby only)
+## 4. Lobby API
 
 ### `NTD.GotoElevators()`
-Finds an empty elevator, teleports and navigates to it until you enter.
-If another player grabs the elevator it auto-retries on a different one; after 30s timeout it gives up and searches again.
+
+Finds an empty elevator, moves into the Play area, and navigates to the elevator.
+
+Behavior:
+
+- Chooses only elevators with no players on the platform.
+- If another player occupies the target elevator first, navigation stops and another elevator is selected.
+- If navigation times out after about 45 seconds, it retries.
+- Elevator entry is detected through the internal `Constants.inElevator` flag, which is more stable than checking UI visibility.
 
 ### `NTD.SelectMap(mapName, modes)`
-Pick a map and start the game (internally calls `GotoElevators` first).
+
+Selects a map and starts the elevator. If you are not already in an elevator, it automatically calls `NTD.GotoElevators()` and waits up to about 60 seconds.
 
 | Param | Type | Description |
 |---|---|---|
 | `mapName` | string | Map name, e.g. `"Plains"` |
-| `modes` | nil / string / table | `nil` → no extra modes; single string → one mode; table → multiple modes |
+| `modes` | nil / string / table | `nil` means no extra modes; string means one mode; table means multiple modes |
 
 ```lua
+NTD.SelectMap("Plains")
 NTD.SelectMap("Plains", "Rush")
 NTD.SelectMap("Plains", { "Rush", "Boss" })
 ```
 
-> If a previous `EquipTower` failed (tower missing from inventory), `SelectMap` aborts and will not enter the map.
+Notes:
+
+- If the previous `NTD.EquipTower(...)` failed, `SelectMap` aborts to avoid starting automation with missing towers.
+- The resume loader is injected only when teleport actually starts.
+- If the user manually leaves the elevator, the map selection flow stops.
 
 ### `NTD.StartGame()`
-Starts the elevator into the level. `SelectMap` calls this for you — rarely needed manually.
 
-### `NTD.EquipTower(names)`
-Equips towers by name (via the client-side `equipTower`, with UI updates). Automatically unequips towers not in the list. Max 6 slots.
+Sends the start-elevator event. Usually called by `SelectMap`; manual use is rarely needed.
 
-| Param | Type | Description |
-|---|---|---|
-| `names` | string / table | A single tower name, or an array mixing `"name"` and `{name, condition}` entries |
+### `NTD.SaveLocalScript(scriptContent)`
 
-`condition` (mutation filter) can be a string (e.g. `"Shiny"`) or a table (e.g. `{"Shiny","Prime"}`).
+Saves the Lua code that should resume after teleport.
+
+```lua
+NTD.SaveLocalScript([[
+    NTD.AddSetSpeed(3, 1)
+    NTD.ExecuteQueue()
+]])
+```
+
+Saved path:
+
+```text
+Tsetingnil_script/NTD/main_<UserId>.lua
+```
+
+### `NTD.Lobby()`
+
+Injects a loader that reloads the lobby UI after returning, then sends the game's Return event.
+
+Requires `queue_on_teleport`.
+
+---
+
+## 5. Equip API
+
+### `NTD.EquipTower(names) -> boolean`
+
+Equips towers by name. It keeps already-equipped towers that match the target list, unequips extras, equips missing targets, then verifies the final hotbar.
+
+Accepted formats:
 
 ```lua
 NTD.EquipTower("Marksman")
 NTD.EquipTower({ "Marksman", "Farm", "Sniper" })
-NTD.EquipTower({ "Marksman", { "Doombringer", {"Shiny","Prime"} } })
+NTD.EquipTower({ "Marksman", { "Doombringer", "Shiny" } })
+NTD.EquipTower({ "Marksman", { "Doombringer", { "Shiny", "Prime" } } })
+NTD.EquipTower({ "Marksman", { "Doombringer", "Speed2" } })
 ```
 
+`condition` may be a string or array and is used as a mutation filter. Without a condition, the API prefers the same tower with no mutations, then falls back to another same-name tower when needed.
+
+Equip flow:
+
+1. Scan the current hotbar.
+2. Match condition-specific entries first.
+3. Assign each target one UUID only.
+4. Unequip extra towers.
+5. Equip missing towers.
+6. Poll for up to about 3 seconds to confirm server data has synced.
+
+If a tower is missing or final verification fails, it returns `false` and marks `equipFailed`; the next `NTD.SelectMap(...)` will automatically abort.
+
 ### `NTD.GetEquippedUUIDs() -> table`
-Returns the list of currently equipped UUIDs (up to 6).
 
-### `NTD.SaveLocalScript(scriptContent)`
-Saves a string to `Tsetingnil_script/NTD/main_<YourUserId>.lua`, used for auto-resume after teleport (see [Loading & Startup](#1-loading--startup)).
+Returns an array of currently equipped tower UUIDs, up to 6.
 
-### `NTD.Lobby()`
-Injects a resume script that reloads the lobby UI after returning, and triggers the return to lobby (requires `queue_on_teleport`).
+### `NTD.UnequipAll() -> boolean`
+
+Unequips every currently equipped tower and verifies that the hotbar is empty.
+
+The official version does not currently assign a Chinese-key alias. Use `NTD.UnequipAll()`.
 
 ---
 
-## 4. In-Game: Operation Queue
+## 6. In-Game Queue API
 
-**Queue model**: stage all operations with the `Add*` family first, then call `ExecuteQueue` to run them all on a schedule.
+Queue mode is for recorded or fixed automation routes. Add operations with `Add*` functions, then call `NTD.ExecuteQueue()`.
 
-- **Sort order**: first by `phase` (1 < 1.5 < 2), then within a phase by `elapsed` (seconds after game start), ascending.
-- **Order (sequence) system**: every successful placement is auto-assigned an `order`, starting from **1**. Upgrades / sells / abilities reference this order ("the Nth tower placed").
+Sort rules:
+
+- First by `phase`: `1 < 1.5 < 2`
+- Within the same phase, by `elapsed` ascending
+
+Tower order rules:
+
+- Every successful placement receives an order starting from `1`.
+- Upgrade, sell, and ability operations reference that order.
+- If all placement retries fail, the API still advances the order and leaves a hole, so later towers do not receive the wrong order.
 
 ### `NTD.AddPlaceTower(unitType, x, y, z, rotation, elapsed [, condition])`
-Queue a "place tower" operation.
+
+Queues a tower placement.
 
 | Param | Type | Description |
 |---|---|---|
-| `unitType` | string | Tower name (must be in inventory) |
-| `x, y, z` | number | World coordinates (must land on a `Placeable`) |
-| `rotation` | number | Rotation angle |
-| `elapsed` | number | Seconds after game start to run |
-| `condition` | string / table / nil | mutation filter (e.g. `"Shiny"`); nil = no filter |
+| `unitType` | string | Tower name |
+| `x, y, z` | number | World coordinates; must be on a `Placeable` |
+| `rotation` | number | Reserved parameter; the current official version mainly uses coordinates and tower data |
+| `elapsed` | number | Seconds after game start |
+| `condition` | string / table / nil | Mutation filter |
+
+```lua
+NTD.AddPlaceTower("Farm", 10, 5, 20, 0, 5.0)
+NTD.AddPlaceTower("Doombringer", 12, 5, 22, 0, 8.0, "Shiny")
+```
 
 ### `NTD.AddUpgradeTower(order, elapsed)`
-Upgrade the `order`-th placed tower.
+
+Upgrades the `order`-th successfully placed tower at the given time.
 
 ### `NTD.AddSellTower(order, elapsed)`
-Sell the `order`-th tower. After selling, that order is cleared and can no longer be upgraded/sold.
+
+Sells the `order`-th tower. After selling, that order is cleared and cannot be upgraded or sold again.
 
 ### `NTD.AddTowerAbility(order, abilityName, elapsed)`
-Use an ability on the `order`-th tower. `abilityName` e.g. `"Rage"`, `"Heal"`, `"Spin"` (see the TowerAbilities module for available abilities).
+
+Uses an ability on the `order`-th tower.
+
+```lua
+NTD.AddTowerAbility(2, "Rage", 60)
+```
 
 ### `NTD.AddSkipWave(elapsed)`
-Queue a "skip wave". If the game already has auto-skip enabled, this op is skipped automatically.
+
+Queues a skip-wave action. If `AutoSkipWave` is already enabled, the operation is skipped automatically.
 
 ### `NTD.AddSetSpeed(speed, elapsed)`
-Set game speed (`speed` = 1, 2, 3…).
+
+Sets game speed.
+
+```lua
+NTD.AddSetSpeed(3, 10)
+```
 
 ### `NTD.AddGameSetting(settingName, value, elapsed)`
-Toggle a game setting (e.g. `"AutoSkipWave"`) at the given time. Only toggles if the current value differs from `value`.
+
+Toggles a game setting at the given time. It calls `ToggleSetting` only when the current value differs from the target value.
+
+```lua
+NTD.AddGameSetting("AutoSkipWave", true, 2)
+```
 
 ### `NTD.AddEnd(elapsed)`
-Marks the queue's end point and starts a 5-minute timeout timer: on timeout, if `AutoReplay` is on it auto-replays. Also sets the baseline for `GetQueueRemaining`.
+
+Adds an end marker and sets the reference point for `NTD.GetQueueRemaining()`.
+
+When the `end` operation runs, the API starts a 5-minute timeout timer. If the timer expires and `AutoReplay` is enabled, it injects the resume loader and replays.
 
 ### `NTD.ExecuteQueue()`
-Runs the queue. In-game only. Flow:
-1. Wait for game start (auto-clicks Ready if `AutoReady` is on)
-2. Schedule each op by its `elapsed` using an internal timer
-3. Monitor game over; auto-replay on end if `AutoReplay` is on
-4. Ops more than 5s late emit a `warn`, but still run (never skipped for lateness)
+
+Runs the queue. In-game only.
+
+Flow:
+
+1. Check that the current scene is in-game.
+2. Sort the queue.
+3. Start the auto-Ready loop until `GameRunning` becomes `true`.
+4. Wait for the game to start.
+5. Run operations according to `elapsed`.
+6. If an operation is more than 5 seconds late, warn but still run it.
+7. Watch game end and auto-replay when `AutoReplay` is enabled.
 
 ---
 
-## 5. In-Game: Direct Control
-
-Immediate, non-queued operations.
+## 7. Direct In-Game Control
 
 | Function | Description |
 |---|---|
-| `NTD.Ready()` | Send Ready to the server. Safety guard: 50 consecutive triggers auto-restart |
-| `NTD.Replay()` | Trigger a replay |
-| `NTD.Difficulty(difficulty)` | Set difficulty based on current UI state and start, attaching a game-over monitor |
-| `NTD.GameSetting(settingName, targetValue)` | Immediately set a setting to `targetValue` (only if it differs) |
-| `NTD.GetMap() -> string` | Current map name (returns `"Unknown"` on failure) |
+| `NTD.Ready()` | Sends Ready. If triggered 50 consecutive times, it attempts replay to avoid getting stuck |
+| `NTD.Replay()` | Sends Replay |
+| `NTD.Difficulty(difficulty)` | Sets difficulty based on current UI state and starts the game; also attaches an end monitor |
+| `NTD.GameSetting(settingName, targetValue)` | Immediately toggles a setting only when the current value differs |
+| `NTD.GetMap() -> string` | Returns `Values.Map.Value`; returns `"Unknown"` on failure |
 
 ---
 
-## 6. Settings
+## 8. Phase 2 Maps
 
-### `NTD.AutoReplay(value: boolean)`
-Whether to auto-restart after the game ends.
+Some maps switch to another map during the run and need Phase 1 / Phase 2 separation.
 
-### `NTD.Debug(value: boolean)`
-`NTD.Debug(true)`: disables auto-Ready and auto-replay, and loads the **placement tracker** (for capturing tower coordinates / debugging).
+### `NTD.AddMapWait([scriptName])`
 
----
+Adds a map-switch wait marker. Its phase is always `1.5`, so it runs after Phase 1 and before Phase 2. After calling it, newly added queue operations are assigned to Phase 2.
 
-## 7. Queue Timing Queries
+`scriptName` is an optional Phase 2 script prefix.
 
-| Function | Returns | Description |
-|---|---|---|
-| `NTD.GetQueueElapsed()` | number / nil | Seconds the queue has run (since game start). nil if `ExecuteQueue` not called yet |
-| `NTD.GetQueueRemaining()` | number / nil | Seconds left until the `AddEnd` time point; negative = past it. nil if `ExecuteQueue` or `AddEnd` not called |
+After the map changes, the API:
 
----
+1. Waits until `Values.Map.Value` becomes the new map name.
+2. Resets the Phase 2 timing baseline.
+3. Clears Phase 1 placed-tower cache.
+4. Keeps `nextOrder`, so Phase 2 order numbers continue after Phase 1.
+5. Tries to load an external Phase 2 script.
 
-## 8. Multi-Phase Maps (Phase 2)
+External script folder:
 
-Some maps (e.g. Moon) switch maps mid-run, requiring the queue to be split into Phase 1 / Phase 2.
-
-### `NTD.AddMapWait([targetMap])`
-Inserts a "wait for map switch" marker (phase 1.5, ordered after all Phase 1, before Phase 2). After calling it, all subsequently added ops belong to **Phase 2**.
-
-- with `targetMap` → wait until the map switches to that name
-- omitted → wait until the map switches to any map different from the current one
-
-After the switch, the framework: resets the Phase 2 timing baseline, clears Phase 1 tower instance data (but **keeps order numbering continuous**: Phase 1 #1..#N → Phase 2 starts at #N+1), and tries to load an external Phase 2 script
-`Tsetingnil_script/NTD/Script/*_<mapName>.lua`.
-
-> **Auto order offset**: if the external Phase 2 script annotates its recorded starting order with `-- #N`, the framework auto-corrects the `order` of `AddUpgradeTower` / `AddSellTower` / `AddTowerAbility` to match this run's actual Phase 1 tower count — no manual edits needed.
-
----
-
-## 9. Auto-Retry Mechanism
-
-Placement / upgrade use two layers of auto-retry to improve success under lag or rate-limiting, and to protect the order sequence from corruption.
-
-### Place
-```
-ExecuteOperation → RawPlaceTower (low-level retry 5× × 0.2s)
-   success → orderToId[nextOrder] = id, nextOrder++  ✅
-   fail    → queue layer adds 10 more (× 0.2s, ~2s)
-               success → assign order, nextOrder++  ✅
-               all fail → wait 2s then force nextOrder++ (leave a hole so later
-                          towers don't steal the order) ⏭
-   total: up to 5 + 10 = 15 attempts (~3s)
+```text
+Tsetingnil_script/NTD/Script
 ```
 
-### Upgrade
-```
-ExecuteOperation → look up orderToId[order]
-   not found (tower never placed) → no retry, skip ⏭
-   found → RawUpgradeTower (low-level retry 3× × 0.1s)
-             fail → queue layer adds 10 more (× 0.2s) → give up if all fail ⏭
-   total: up to 3 + 10 = 13 attempts
-```
+Search rules:
 
-### Exception Guard
-Every `InvokeServer` and the queue main loop's `ExecuteOperation` are wrapped in `pcall`: a server-side error (throw) is treated as a normal failure and flows into the retry/skip logic above, so it **never silently kills the whole queue coroutine**.
+- Collect files matching `*_<actualMapName>.lua`.
+- If `scriptName` is provided, prefer a basename equal to `<scriptName>` or `<scriptName>_<mapName>`.
+- If no preferred file matches, sort by filename descending and use the newest one.
+- If an external script is found, the current queue is cleared, the script is loaded, and that script is expected to call `NTD.ExecuteQueue()`.
+- If no external script is found, the already-queued inline Phase 2 operations continue.
 
----
-
-## 10. Full Example
+Example:
 
 ```lua
--- ===== In the lobby =====
--- Save the in-game script first, so it auto-resumes after teleport
+-- Phase 1
+NTD.AddPlaceTower("Farm", 10, 5, 20, 0, 5) -- #1
+NTD.AddMapWait("MoonRun")
+
+-- If no external MoonRun_<map>.lua is found, this inline Phase 2 still runs
+NTD.AddPlaceTower("Marksman", 15, 5, 25, 0, 2) -- #2
+NTD.ExecuteQueue()
+```
+
+### Automatic Phase 2 Order Offset
+
+External Phase 2 scripts may annotate the first `AddPlaceTower(...)` with the recorded Phase 2 starting order:
+
+```lua
+NTD.AddPlaceTower("Marksman", 15, 5, 25, 0, 2) -- #7
+NTD.AddUpgradeTower(7, 20)
+```
+
+If the actual Phase 1 tower count differs from the recorded run, the API automatically adjusts orders in:
+
+- `AddUpgradeTower(order, ...)`
+- `AddSellTower(order, ...)`
+- `AddTowerAbility(order, ...)`
+
+Only orders greater than or equal to the annotated starting order are offset.
+
+---
+
+## 9. Settings & Queries
+
+### `NTD.AutoReplay(value: boolean)`
+
+Controls whether the API auto-replays after game end or timeout.
+
+Default: `false`
+
+### `NTD.Debug(value: boolean)`
+
+Main supported usage:
+
+```lua
+NTD.Debug(true)
+```
+
+Effects:
+
+- Disables auto-Ready.
+- Disables auto-replay.
+- Loads the placement tracker.
+
+### `NTD.GetQueueElapsed() -> number | nil`
+
+Returns queue elapsed seconds. Returns `nil` before the queue has started.
+
+### `NTD.GetQueueRemaining() -> number | nil`
+
+Returns seconds remaining until `NTD.AddEnd(elapsed)`. May be negative. Returns `nil` if the queue has not started or `AddEnd` was not called.
+
+### `NTD.Auto(boolen)`
+
+Reserved in the official version. No implemented behavior yet.
+
+---
+
+## 10. Retry & Safety
+
+### Placement
+
+Low-level `RawPlaceTower` retries up to 5 times by default, about 0.2 seconds apart.
+
+If the queue layer still sees placement failure, it retries 10 more times, about 0.2 seconds apart.
+
+If all retries fail, it waits about 2 seconds and advances the order anyway, leaving a hole so later towers do not receive the wrong order.
+
+### Upgrade
+
+Low-level `RawUpgradeTower` retries up to 3 times by default, about 0.1 seconds apart.
+
+If the queue layer still sees upgrade failure and the order has a tower id, it retries 10 more times, about 0.2 seconds apart.
+
+### Exception Guard
+
+Placement and upgrade `InvokeServer` calls are wrapped with `pcall`. Each `ExecuteQueue` operation is also wrapped with `pcall`. Server throws or one-off operation errors are treated as failures and do not stop the entire queue coroutine.
+
+---
+
+## 11. Complete Example
+
+### Lobby Script
+
+```lua
+NTD.EquipTower({ "Marksman", "Farm" })
+
 NTD.SaveLocalScript([[
-    NTD.EquipTower({ "Marksman", "Farm" })
+    -- Runs automatically after entering the game place
+    NTD.AddGameSetting("AutoSkipWave", true, 1)
+    NTD.AddSetSpeed(3, 2)
 
-    -- Build the queue (elapsed = seconds after game start)
-    NTD.AddPlaceTower("Farm",     10, 5, 20, 0, 5.0)   -- +5.0s place Farm     (→ #1)
-    NTD.AddPlaceTower("Marksman", 15, 5, 25, 0, 8.5)   -- +8.5s place Marksman (→ #2)
-    NTD.AddUpgradeTower(2, 45.0)                        -- +45s upgrade #2 (Marksman)
-    NTD.AddSetSpeed(3, 60.0)                            -- +60s set 3x speed
-    NTD.AddSkipWave(90.0)                               -- +90s skip wave
-    NTD.AddSellTower(1, 120.0)                          -- +120s sell #1 (Farm)
-    NTD.AddEnd(150.0)                                   -- end marker + timeout guard
+    NTD.AddPlaceTower("Farm", 10, 5, 20, 0, 5)       -- #1
+    NTD.AddPlaceTower("Marksman", 15, 5, 25, 0, 8)   -- #2
+    NTD.AddUpgradeTower(2, 45)
+    NTD.AddTowerAbility(2, "Rage", 60)
+    NTD.AddSellTower(1, 120)
+    NTD.AddEnd(150)
 
-    NTD.AutoReplay(true)                               -- auto-restart on end
-    NTD.ExecuteQueue()                                 -- start running
+    NTD.AutoReplay(true)
+    NTD.ExecuteQueue()
 ]])
 
--- Pick a map and start (auto enter elevator + teleport, resuming the script above)
 NTD.SelectMap("Plains", { "Rush" })
 ```
 
+### In-Game Test
+
+```lua
+NTD.AddSetSpeed(3, 1)
+NTD.AddPlaceTower("Marksman", 15, 5, 25, 0, 5)
+NTD.AddUpgradeTower(1, 30)
+NTD.AddEnd(60)
+NTD.ExecuteQueue()
+```
+
 ---
 
-## 11. Quick Reference
+## 12. Quick Reference
 
 ### Scene
-| Function | Scene | Purpose |
-|---|---|---|
-| `IsLobby()` / `IsInGame()` | any | Detect scene |
+
+| Function | Purpose |
+|---|---|
+| `NTD.IsLobby()` | Detect lobby |
+| `NTD.IsInGame()` | Detect in-game |
 
 ### Lobby
+
 | Function | Purpose |
 |---|---|
-| `GotoElevators()` | Enter an elevator |
-| `SelectMap(map, modes)` | Pick map & start (auto-enters elevator) |
-| `StartGame()` | Start elevator (usually automatic) |
-| `EquipTower(names)` | Equip towers |
-| `GetEquippedUUIDs()` | Query equipped UUIDs |
-| `SaveLocalScript(str)` | Save in-game resume script |
-| `Lobby()` | Inject return-to-lobby resume |
+| `NTD.GotoElevators()` | Find and navigate to an empty elevator |
+| `NTD.SelectMap(mapName, modes)` | Select map and start |
+| `NTD.StartGame()` | Start the elevator |
+| `NTD.SaveLocalScript(scriptContent)` | Save teleport resume script |
+| `NTD.Lobby()` | Return to lobby and load lobby UI |
+
+### Equip
+
+| Function | Purpose |
+|---|---|
+| `NTD.EquipTower(names)` | Equip target towers |
+| `NTD.GetEquippedUUIDs()` | Get equipped UUIDs |
+| `NTD.UnequipAll()` | Unequip all towers |
 
 ### In-Game Queue
-| Function | Purpose |
-|---|---|
-| `AddPlaceTower(unit,x,y,z,rot,elapsed[,cond])` | Place tower (assigns order) |
-| `AddUpgradeTower(order, elapsed)` | Upgrade |
-| `AddSellTower(order, elapsed)` | Sell |
-| `AddTowerAbility(order, ability, elapsed)` | Tower ability |
-| `AddSkipWave(elapsed)` | Skip wave |
-| `AddSetSpeed(speed, elapsed)` | Game speed |
-| `AddGameSetting(name, value, elapsed)` | Toggle setting |
-| `AddMapWait([map])` | Wait for map switch (enter Phase 2) |
-| `AddEnd(elapsed)` | End marker + timeout guard |
-| `ExecuteQueue()` | Run the queue |
 
-### In-Game Direct Control
 | Function | Purpose |
 |---|---|
-| `Ready()` | Send Ready |
-| `Replay()` | Replay |
-| `Difficulty(diff)` | Set difficulty & start |
-| `GameSetting(name, value)` | Immediately toggle a setting |
-| `GetMap()` | Current map name |
+| `NTD.AddPlaceTower(unit,x,y,z,rot,elapsed[,condition])` | Queue placement |
+| `NTD.AddUpgradeTower(order, elapsed)` | Queue upgrade |
+| `NTD.AddSellTower(order, elapsed)` | Queue sell |
+| `NTD.AddTowerAbility(order, abilityName, elapsed)` | Queue tower ability |
+| `NTD.AddSkipWave(elapsed)` | Queue skip wave |
+| `NTD.AddSetSpeed(speed, elapsed)` | Queue speed change |
+| `NTD.AddGameSetting(settingName, value, elapsed)` | Queue setting toggle |
+| `NTD.AddMapWait([scriptName])` | Wait for map switch and enter Phase 2 |
+| `NTD.AddEnd(elapsed)` | Queue end marker and timeout guard |
+| `NTD.ExecuteQueue()` | Run queue |
 
-### Settings / Queries
+### Direct Control, Settings, Queries
+
 | Function | Purpose |
 |---|---|
-| `AutoReplay(bool)` | Auto-restart |
-| `Debug(bool)` | Debug mode + placement tracker |
-| `GetQueueElapsed()` | Seconds elapsed |
-| `GetQueueRemaining()` | Seconds left until AddEnd |
+| `NTD.Ready()` | Send Ready |
+| `NTD.Replay()` | Replay |
+| `NTD.Difficulty(difficulty)` | Set difficulty and start |
+| `NTD.GameSetting(settingName, targetValue)` | Toggle setting immediately |
+| `NTD.GetMap()` | Get current map |
+| `NTD.AutoReplay(bool)` | Set auto-replay |
+| `NTD.Debug(bool)` | Debug mode |
+| `NTD.GetQueueElapsed()` | Query queue elapsed seconds |
+| `NTD.GetQueueRemaining()` | Query seconds until AddEnd |
+| `NTD.Auto(boolen)` | Reserved, not implemented |
