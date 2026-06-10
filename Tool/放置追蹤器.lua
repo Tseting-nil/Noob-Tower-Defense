@@ -101,7 +101,7 @@ local customComment = ""
 local script_SpeedMultiplier = 1
 local autoScrollEnabled = true
 local SCRIPT_SAVE_PATH = "Tsetingnil_script/NTD/Script"
-local NTD_API_URL = "http://127.0.0.1:8000/NTD_API_TEST"
+local NTD_API_URL = "https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/%E5%AF%86%E9%91%B0%E7%B3%BB%E7%B5%B1.lua"
 
 -- === 語言設定 ===
 local currentLang = "en"
