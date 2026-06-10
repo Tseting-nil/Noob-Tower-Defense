@@ -58,42 +58,82 @@ local ScriptSettings = {
 	CostMode = true, -- true=錄「成本版」(Add* 閘門用消耗字串、無時間)；false=時間版
 }
 
--- === 金錢追蹤（成本版錄製用）===
-local currentMoney = 0
+-- === 金錢追蹤（成本版錄製用，最終對列方案）===
+local CostTracker = {
+	LastMoney = nil,
+	Connection = nil,
+	ActionQueue = {},
+	CostHistory = {},
+}
+
 local function readMoneyNow()
 	local ok, value = pcall(function()
 		local leaderstats = Players.LocalPlayer:FindFirstChild("leaderstats")
 		local coins = leaderstats and leaderstats:FindFirstChild("Coins")
-		return coins and coins.Value
+		return (coins and (coins:IsA("IntValue") or coins:IsA("NumberValue"))) and coins.Value or nil
 	end)
 	return ok and tonumber(value) or nil
 end
-task.spawn(function()
-	while true do
-		local m = readMoneyNow()
-		if m then currentMoney = m end
-		task.wait(0.1)
+
+local function handleMoneyChange()
+	local currentMoney = readMoneyNow()
+	if not currentMoney or not CostTracker.LastMoney then
+		if currentMoney then CostTracker.LastMoney = currentMoney end
+		return
 	end
-end)
--- 取動作後金錢的「最大單次下降」當成本：扣款是一次大跌，收入每幀微小不影響。
--- before 需是動作前的精確值；短窗(0.6s)降低與下一個動作的捕捉重疊。
-local function captureCost(record, before)
-	task.spawn(function()
-		local prev = before or readMoneyNow() or currentMoney
-		local biggest = 0
-		local t0 = tick()
-		while tick() - t0 < 0.6 do
-			task.wait(0.03)
-			local now = readMoneyNow()
-			if now then
-				local d = prev - now
-				if d > biggest then biggest = d end
-				prev = now
+
+	local diff = currentMoney - CostTracker.LastMoney
+	CostTracker.LastMoney = currentMoney
+
+	if diff < 0 then
+		local cost = math.abs(diff)
+		table.insert(CostTracker.CostHistory, cost)
+
+		if #CostTracker.ActionQueue > 0 then
+			local pendingAction = table.remove(CostTracker.ActionQueue, 1)
+			pendingAction.cost = cost -- 儲存 cost 給可能還沒註冊 callback 的變數
+			if type(pendingAction.callback) == "function" then
+				task.spawn(pendingAction.callback, cost)
 			end
 		end
-		record.cost = math.max(0, math.floor(biggest + 0.5))
+	end
+end
+
+function CostTracker.Init()
+	task.spawn(function()
+		local leaderstats = Players.LocalPlayer:WaitForChild("leaderstats", 10)
+		if not leaderstats then return end
+		local coins = leaderstats:WaitForChild("Coins", 5)
+		if not coins then return end
+
+		CostTracker.LastMoney = readMoneyNow()
+		if CostTracker.Connection then
+			CostTracker.Connection:Disconnect()
+		end
+		CostTracker.Connection = coins:GetPropertyChangedSignal("Value"):Connect(handleMoneyChange)
 	end)
 end
+
+function CostTracker.PushAction(callback)
+	local actionData = {
+		timestamp = os.clock(),
+		callback = callback
+	}
+	table.insert(CostTracker.ActionQueue, actionData)
+	return actionData
+end
+
+function CostTracker.CancelAction(actionData)
+	for i, v in ipairs(CostTracker.ActionQueue) do
+		if v == actionData then
+			table.remove(CostTracker.ActionQueue, i)
+			break
+		end
+	end
+end
+
+-- 初始化
+CostTracker.Init()
 
 -- === 腳本生成設定 ===
 local timeRoundUp = false
@@ -3031,12 +3071,11 @@ local function InitTracker()
 		NamecallHandlers.InvokeServer = {}
 		NamecallHandlers.FireServer = {}
 
-		NamecallHandlers.InvokeServer.PlaceTower = function(_, args, result)
+		NamecallHandlers.InvokeServer.PlaceTower = function(_, args, result, placeAction)
 			local placeArgs = args[1]
 			local towerName = (type(placeArgs) == "table" and placeArgs.towerToPlace) or "Unknown"
 			local targetPos = (type(placeArgs) == "table" and placeArgs.position) or nil
 			local placeUUID = (type(placeArgs) == "table" and placeArgs.towerID) or nil
-			local moneyBefore = readMoneyNow() or currentMoney -- 同步抓動作前精確金錢（成本版）
 
 			queueHookTask(function()
 				if not isGameRunning then
@@ -3059,11 +3098,22 @@ local function InitTracker()
 						UUID = placeUUID,
 						Rotation = 0,
 						Elapsed = elapsed,
+						cost = 0,
 					}
+
+					if placeAction then
+						placeAction.callback = function(cost)
+							info.cost = cost
+							print("✔ Place cost:", cost, "for", towerName)
+						end
+						-- 防呆：如果動作已經被提前處理了，立刻更新
+						if placeAction.cost then
+							info.cost = placeAction.cost
+						end
+					end
 
 					orderToInfo[nextOrder] = info
 					idToOrder[result.id] = nextOrder
-					captureCost(info, moneyBefore) -- 成本版：抓這次放置的消耗
 
 					addLog(
 						T("logPlaceTower"):format(nextOrder, towerName .. getMutLabel(placeUUID), elapsed),
@@ -3079,10 +3129,9 @@ local function InitTracker()
 			return result
 		end
 
-		NamecallHandlers.InvokeServer.UpgradeTower = function(_, args, result)
+		NamecallHandlers.InvokeServer.UpgradeTower = function(_, args, result, upAction)
 			local towerId = tonumber(args[1])
 			local idStr = args[1]
-			local moneyBefore = readMoneyNow() or currentMoney -- 同步抓動作前精確金錢（成本版）
 
 			queueHookTask(function()
 				if result ~= true or not isGameRunning then
@@ -3097,9 +3146,19 @@ local function InitTracker()
 					gameId = towerId,
 					order = order,
 					elapsed = elapsed,
+					cost = 0,
 				}
 				table.insert(upgradeLog, upEntry)
-				captureCost(upEntry, moneyBefore) -- 成本版：抓這次升級的消耗
+
+				if upAction then
+					upAction.callback = function(cost)
+						upEntry.cost = cost
+						print("✔ Upgrade cost:", cost, "for order:", order)
+					end
+					if upAction.cost then
+						upEntry.cost = upAction.cost
+					end
+				end
 
 				if info then
 					addLog(T("logUpgrade"):format(info.order, info.UnitType, elapsed), Color3.fromRGB(255, 255, 100))
@@ -3251,12 +3310,26 @@ local function InitTracker()
 
 				if method == "invokeserver" then
 					if self == PlaceTowerRemote then
+						local placeAction
+						if ScriptSettings.CostMode then
+							placeAction = CostTracker.PushAction(nil)
+						end
 						result = oldNamecall(self, ...)
-						return NamecallHandlers.InvokeServer.PlaceTower(self, args, result)
+						if ScriptSettings.CostMode and (type(result) ~= "table" or not result.id) then
+							CostTracker.CancelAction(placeAction)
+						end
+						return NamecallHandlers.InvokeServer.PlaceTower(self, args, result, placeAction)
 					end
 					if self == UpgradeTowerRemote then
+						local upAction
+						if ScriptSettings.CostMode then
+							upAction = CostTracker.PushAction(nil)
+						end
 						result = oldNamecall(self, ...)
-						return NamecallHandlers.InvokeServer.UpgradeTower(self, args, result)
+						if ScriptSettings.CostMode and result ~= true then
+							CostTracker.CancelAction(upAction)
+						end
+						return NamecallHandlers.InvokeServer.UpgradeTower(self, args, result, upAction)
 					end
 					if self == SellTowerRemote then
 						result = oldNamecall(self, ...)
