@@ -174,6 +174,31 @@ local L = {
 		webhook_title_total    = "總統計",
 		webhook_title_run      = "本次抽取統計",
 		webhook_title_master   = "AutoMaster 統計",
+		-- Potion 分頁
+		tab_potion        = "藥水",
+		potion_exp        = "經驗",
+		potion_coin       = "金幣",
+		potion_dmg        = "傷害",
+		potion_shiny      = "閃亮",
+		potion_lucky      = "幸運",
+		potion_refresh    = "重新整理",
+		potion_level      = "製作等級",
+		potion_gems       = "寶石",
+		potion_corner     = [[藥水\等級]],
+		-- Potion 自動製作
+		potion_craft_sep     = "(藥水 | 等級)",
+		potion_auto_craft    = "自動製作藥水",
+		potion_craft_start   = "開始製作 %s",
+		potion_craft_full    = "製作槽已滿，等待空位…",
+		potion_craft_nogem   = "寶石不足 %d/%d",
+		potion_craft_nolevel = "製作等級不足 %d/%d",
+		potion_craft_noprev  = "上一級藥水不足 %s %d/3",
+		potion_craft_fail    = "製作失敗：%s",
+		potion_craft_nolobby = "尚未進入大廳…",
+		potion_cfg_saved     = "已儲存藥水設定",
+		potion_cfg_loaded    = "已載入藥水設定",
+		potion_cfg_savefail  = "藥水設定儲存失敗",
+		potion_cfg_none      = "找不到此玩家的藥水設定",
 	},
 	en = {
 		title             = "Lobby Script",
@@ -309,6 +334,31 @@ local L = {
 		webhook_title_total    = "Total Stats",
 		webhook_title_run      = "This Run Stats",
 		webhook_title_master   = "AutoMaster Stats",
+		-- Potion tab
+		tab_potion        = "Potions",
+		potion_exp        = "XP",
+		potion_coin       = "Coins",
+		potion_dmg        = "Damage",
+		potion_shiny      = "Shiny",
+		potion_lucky      = "Luck",
+		potion_refresh    = "Refresh",
+		potion_level      = "Crafting Lvl",
+		potion_gems       = "Gems",
+		potion_corner     = [[Potion\Tier]],
+		-- Potion auto craft
+		potion_craft_sep     = "(Potion | Tier)",
+		potion_auto_craft    = "Auto Craft Potion",
+		potion_craft_start   = "Crafting %s",
+		potion_craft_full    = "Craft slots full, waiting…",
+		potion_craft_nogem   = "Not enough gems %d/%d",
+		potion_craft_nolevel = "Crafting level too low %d/%d",
+		potion_craft_noprev  = "Need 3x %s (%d/3)",
+		potion_craft_fail    = "Craft failed: %s",
+		potion_craft_nolobby = "Not in lobby yet…",
+		potion_cfg_saved     = "Potion config saved",
+		potion_cfg_loaded    = "Potion config loaded",
+		potion_cfg_savefail  = "Potion config save failed",
+		potion_cfg_none      = "No saved potion config",
 	},
 }
 local T = L[currentLang]
@@ -388,11 +438,21 @@ local Scripttable = {
     ConfigDir  = [[Tsetingnil_script\NTD\Config]],
     ConfigPath = [[Tsetingnil_script\NTD\Config\Summon_AutoDelete.json]],
     WebhookConfigPath = [[Tsetingnil_script\NTD\Config\lobby_Webhook_Config.json]],
+    PotionConfigPath  = [[Tsetingnil_script\NTD\Config\lobby_Potion_Config.json]],
+  },
+  Potion = {
+    T1 = {exp = 0, coin = 0, dmg = 0, shiny = 0, lucky = 0, time = 5 , spend = 25, level = 0},
+    T2 = {exp = 0, coin = 0, dmg = 0, shiny = 0, lucky = 0, time = 60, spend = 50, level = 0},
+    T3 = {exp = 0, coin = 0, dmg = 0, shiny = 0, lucky = 0, time = 420, spend = 75, level = 0},
+    T4 = {exp = 0, coin = 0, dmg = 0, shiny = 0, lucky = 0, time = 1800, spend = 100, level = 25},
+    T5 = {exp = 0, coin = 0, dmg = 0, shiny = 0, lucky = 0, time = 7200, spend = 250, level = 50},
+    level = game:GetService("Players").LocalPlayer.CraftingLvl.Value or 0,
+    gems = game:GetService("Players").LocalPlayer.Gems.Value or 0,
   },
   Webhook = {
     -- 常數 / 模組來源
-    Rarities      = { "Common", "Rare", "Epic", "Legendary", "Mythic", "Secret", "Exclusive" },
-    ShinyRarities = { Common = true, Rare = true, Epic = true, Legendary = true, Mythic = true, Secret = true },
+    Rarities      = { Common = true, Rare = true, Epic = true, Legendary = true, Mythic = true, Secret = true },
+    ShinyRarities = { Common = true, Rare = true, Epic = true, Legendary = true },  -- 哪些稀有度有閃亮變體（決定 Webhook 表格是否顯示閃亮欄；要含 Mythic/Secret 自行加上）
     TopRarities   = { Mythic = true, Secret = true, Exclusive = true },
     UIRarities    = { "Common", "Rare", "Epic", "Legendary", "Mythic", "Secret" },
     UIPing        = { "Mythic", "Secret" },
@@ -421,7 +481,7 @@ local Mainfunction = {}
 -- ========================================================================== --
 -- Webhook 初始化（資料模型已在 Scripttable.Webhook 定義）
 -- 每稀有度開關初始化
-for _, r in ipairs(Scripttable.Webhook.Rarities) do
+for r in pairs(Scripttable.Webhook.Rarities) do
   Scripttable.Webhook.Summon[r] = {
     Normal = false, Shiny = false,
     IndependentNormal = false, IndependentShiny = false,
@@ -463,7 +523,7 @@ end
 -- 把大廳的 i18n 稀有度名稱傳給模組（webhook 內容跟著語言走；塔名無翻譯維持原文）
 do
   local rarityNames = {}
-  for _, r in ipairs(Scripttable.Webhook.Rarities) do
+  for r in pairs(Scripttable.Webhook.Rarities) do
     rarityNames[r] = T["rarity_" .. r] or r
   end
   Webhook:SetConfig({
@@ -1028,6 +1088,7 @@ for _, Name in ipairs({
 	T.tab_main,
 	T.tab_summon,
   T.tab_localscript,
+  T.tab_potion,
   T.tab_webhook
 }) do
 	local Tab = TabsWindow:CreateTab({
@@ -1040,11 +1101,9 @@ end
 -- 修改 Tab 字體和大小
 task.spawn(function()
 	task.wait(0.1)
-
 	for _, tab in ipairs(Tabs) do
 		local tabButton = tab.TabButton.Button
 		local label = tabButton:FindFirstChildWhichIsA("TextLabel")
-
 		if label then
 			label.TextSize = currentLang == "en" and 14 or 18
 			label.Font = Enum.Font.Ubuntu
@@ -1070,7 +1129,12 @@ local Tab_Localscript = Tabs[3]:ScrollingCanvas({
 	UiPadding = UDim.new(0, 0)
 })
 
-local Tab_Webhook = Tabs[4]:ScrollingCanvas({
+local Tab_Potion = Tabs[4]:ScrollingCanvas({
+  Fill = true,
+  UiPadding = UDim.new(0, 0)
+})
+
+local Tab_Webhook = Tabs[5]:ScrollingCanvas({
   Fill = true,
   UiPadding = UDim.new(0, 0)
 })
@@ -1822,6 +1886,339 @@ Scripttable.Localscript.ScriptListTable = Tab_Localscript:Table({
 Mainfunction.BuildScriptList()
 
 -- ========================================================================== --
+-- Tab_Potion
+
+-- 遊戲藥水類型前綴 → Scripttable.Potion 欄位名
+-- (Items.Potions 以「<類型>Potion<階級>」字串為 key，例 LuckPotion3 = 167)
+Scripttable.Potion.FieldMap = {
+  XP     = "exp",
+  Coins  = "coin",
+  Damage = "dmg",
+  Shiny  = "shiny",
+  Luck   = "lucky",
+}
+
+-- 表格列順序（上到下）；field 對應 Scripttable.Potion.T*.<field>
+Scripttable.Potion.Rows = {
+  { field = "exp",   key = "potion_exp"   },
+  { field = "coin",  key = "potion_coin"  },
+  { field = "dmg",   key = "potion_dmg"   },
+  { field = "shiny", key = "potion_shiny" },
+  { field = "lucky", key = "potion_lucky" },
+}
+
+-- 自動製作：類型對照（顯示名 ↔ 遊戲前綴 / Potion 欄位）
+Scripttable.Potion.CraftTypes = {
+  { label = T.potion_exp,   prefix = "XP",     field = "exp"   },
+  { label = T.potion_coin,  prefix = "Coins",  field = "coin"  },
+  { label = T.potion_dmg,   prefix = "Damage", field = "dmg"   },
+  { label = T.potion_shiny, prefix = "Shiny",  field = "shiny" },
+  { label = T.potion_lucky, prefix = "Luck",   field = "lucky" },
+}
+-- Combo 用的純標籤陣列
+Scripttable.Potion.CraftTypeLabels = {}
+for _, e in ipairs(Scripttable.Potion.CraftTypes) do
+  table.insert(Scripttable.Potion.CraftTypeLabels, e.label)
+end
+-- 當前選擇 + 自動開關（預設 幸運 T1）
+Scripttable.Potion.Craft = { auto = false, running = false, type = Scripttable.Potion.CraftTypes[5], tier = 1 }
+
+Mainfunction.getPotionConstants = function()
+  if Scripttable.Potion.ConstantsCache then return Scripttable.Potion.ConstantsCache end
+  local ok, mod = pcall(function()
+    return require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Constants"))
+  end)
+  if ok then Scripttable.Potion.ConstantsCache = mod end
+  return Scripttable.Potion.ConstantsCache
+end
+
+-- 從背包讀藥水數量 → 寫入 Scripttable.Potion.T*.{exp/coin/dmg/shiny/lucky}
+Mainfunction.updPotion = function()
+  local Constants = Mainfunction.getPotionConstants()
+  local data = Constants and Constants.currentPlrData
+  local potions = data and data.Items and data.Items.Potions
+  if type(potions) ~= "table" then return false end
+
+  -- 先把 T1~T5 的數量欄位歸零（藥水歸 0 時遊戲會直接移除該 key，必須先清再填）
+  for tierName, tier in pairs(Scripttable.Potion) do
+    if type(tier) == "table" and tierName:match("^T%d$") then
+      for _, field in pairs(Scripttable.Potion.FieldMap) do
+        tier[field] = 0
+      end
+    end
+  end
+
+  -- 寫入現有數量：key 形如 "<類型>Potion<階級>"
+  for name, count in pairs(potions) do
+    local typeName, tierNum = tostring(name):match("^(%a+)Potion(%d+)$")
+    local field = typeName and Scripttable.Potion.FieldMap[typeName]
+    local tier  = tierNum and Scripttable.Potion["T" .. tierNum]
+    if field and tier and type(count) == "number" then
+      tier[field] = count
+    end
+  end
+
+  -- 同步製作等級 / 寶石（Scripttable.Potion 既有欄位）
+  local lvl = Gametable.LocalPlayer:FindFirstChild("CraftingLvl")
+  local gem = Gametable.LocalPlayer:FindFirstChild("Gems")
+  if lvl then Scripttable.Potion.level = lvl.Value end
+  if gem then Scripttable.Potion.gems  = gem.Value end
+
+  return true
+end
+
+-- 把 Scripttable.Potion 的數值寫進表格 cell（updPotion 負責抓資料，這裡只負責顯示）
+Mainfunction.refreshPotionCells = function()
+  for _, row in ipairs(Scripttable.Potion.Rows) do
+    for t = 1, 5 do
+      local tier = Scripttable.Potion["T" .. t]
+      local cell = Scripttable.Potion.Cells[row.field][t]
+      if tier and cell then
+        local txt = tostring(tier[row.field] or 0)
+        if cell.Text ~= txt then cell.Text = txt end  -- 只在變動才寫，避免每秒輪詢觸發 ReGui 重排
+      end
+    end
+  end
+  local info = string.format("%s: %s   %s: %s",
+    T.potion_level, tostring(Scripttable.Potion.level or 0),
+    T.potion_gems,  tostring(Scripttable.Potion.gems  or 0))
+  if Scripttable.Potion.InfoLabel.Text ~= info then
+    Scripttable.Potion.InfoLabel.Text = info
+  end
+end
+
+-- 自動製作藥水
+Mainfunction.autoCraftPotion = function()
+  if Scripttable.Potion.Craft.running then return end
+  Scripttable.Potion.Craft.running = true
+  local CraftPotion = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("CraftPotion")
+  local lastReason
+  local function blocked(reason)
+    if reason ~= lastReason then
+      lastReason = reason
+      Msg:Warning(reason)
+    end
+  end
+
+  while Scripttable.Potion.Craft.auto do
+    local sel    = Scripttable.Potion.Craft
+    local tier   = sel.tier
+    local prefix = sel.type.prefix
+    local key    = prefix .. "Potion" .. tier
+    local Constants = Mainfunction.getPotionConstants()
+    local pd = Constants and Constants.currentPlrData
+
+    if not pd then
+      blocked(T.potion_craft_nolobby)
+    else
+      -- 1. 時間：CraftQueue 內仍在燒的槽位（EndTime > os.time()），<3 才有空位
+      local queue = (pd.Times and pd.Times.CraftQueue) or {}
+      local brewing = 0
+      for _, c in pairs(queue) do
+        if type(c) == "table" and c.EndTime and c.EndTime > os.time() then
+          brewing = brewing + 1
+        end
+      end
+      -- 2. 寶石
+      local gemObj = Gametable.LocalPlayer:FindFirstChild("Gems")
+      local gems   = (gemObj and gemObj.Value) or 0
+      local cost   = (Scripttable.Potion["T" .. tier] and Scripttable.Potion["T" .. tier].spend) or 0
+      -- 2.1 製作等級（Potion.T4/T5 才有限制，T1-T3 level=0 永遠通過）
+      local lvlObj   = Gametable.LocalPlayer:FindFirstChild("CraftingLvl")
+      local myLevel  = (lvlObj and lvlObj.Value) or 0
+      local reqLevel = (Scripttable.Potion["T" .. tier] and Scripttable.Potion["T" .. tier].level) or 0
+      -- 3. 上一級藥水 x3（T1 免）
+      local prevKey, prevCount = nil, math.huge
+      if tier > 1 then
+        prevKey   = prefix .. "Potion" .. (tier - 1)
+        prevCount = (pd.Items and pd.Items.Potions and pd.Items.Potions[prevKey]) or 0
+      end
+
+      if brewing >= 3 then
+        blocked(T.potion_craft_full)
+      elseif myLevel < reqLevel then
+        blocked(string.format(T.potion_craft_nolevel, myLevel, reqLevel))
+      elseif gems < cost then
+        blocked(string.format(T.potion_craft_nogem, gems, cost))
+      elseif tier > 1 and prevCount < 3 then
+        blocked(string.format(T.potion_craft_noprev, prevKey, prevCount))
+      else
+        local pOk, success, msg = pcall(function() return CraftPotion:InvokeServer(key) end)
+        if pOk and success ~= false then
+          lastReason = nil  -- 製作成功，重置受阻提示
+          Msg:Success(string.format(T.potion_craft_start, key))
+        else
+          local detail = pOk and msg or success  -- 伺服器訊息 或 pcall 錯誤
+          blocked(string.format(T.potion_craft_fail, tostring(detail)))
+        end
+      end
+    end
+    task.wait(2)
+  end
+  Scripttable.Potion.Craft.running = false
+end
+
+-- 檔案結構：{ ["<UserId>"] = { type="Luck", tier=3, auto=false }, ... }
+Mainfunction.SavePotionConfig = function(silent)
+  for _, dir in ipairs({ "Tsetingnil_script", "Tsetingnil_script\\NTD", "Tsetingnil_script\\NTD\\Config" }) do
+    if isfolder and makefolder and not isfolder(dir) then pcall(makefolder, dir) end
+  end
+  local path = Scripttable.Localscript.PotionConfigPath
+  -- 先讀回整份（全玩家），只覆寫自己那筆，不動別人的
+  local all = {}
+  if isfile and readfile and isfile(path) then
+    local rok, raw = pcall(readfile, path)
+    if rok and raw and raw ~= "" then
+      local dok, data = pcall(function() return HttpService:JSONDecode(raw) end)
+      if dok and type(data) == "table" then all = data end
+    end
+  end
+  all[tostring(Gametable.LocalPlayer.UserId)] = {
+    type = Scripttable.Potion.Craft.type.prefix,
+    tier = Scripttable.Potion.Craft.tier,
+    auto = Scripttable.Potion.Craft.auto,
+  }
+  local ok, encoded = pcall(function() return HttpService:JSONEncode(all) end)
+  if not ok then
+    if not silent then Msg:Warning(T.potion_cfg_savefail) end
+    return false
+  end
+  local wok, err = pcall(writefile, path, encoded)
+  if wok then
+    if not silent then Msg:Success(T.potion_cfg_saved) end
+    return true
+  end
+  if not silent then Msg:Warning(T.potion_cfg_savefail .. ": " .. tostring(err)) end
+  return false
+end
+
+-- 載入自己（UserId）那筆設定，套用到 Craft 並同步下拉 / 開關
+Mainfunction.LoadPotionConfig = function(silent)
+  local path = Scripttable.Localscript.PotionConfigPath
+  if not (isfile and readfile and isfile(path)) then
+    if not silent then Msg:Warning(T.potion_cfg_none) end
+    return false
+  end
+  local rok, raw = pcall(readfile, path)
+  if not rok or not raw or raw == "" then
+    if not silent then Msg:Warning(T.potion_cfg_none) end
+    return false
+  end
+  local dok, data = pcall(function() return HttpService:JSONDecode(raw) end)
+  if not dok or type(data) ~= "table" then
+    if not silent then Msg:Warning(T.potion_cfg_none) end
+    return false
+  end
+  local cfg = data[tostring(Gametable.LocalPlayer.UserId)]
+  if type(cfg) ~= "table" then
+    if not silent then Msg:Warning(T.potion_cfg_none) end  -- 此玩家尚未存過
+    return false
+  end
+  -- 類型（prefix → CraftTypes entry）+ 同步下拉
+  if type(cfg.type) == "string" then
+    for i, e in ipairs(Scripttable.Potion.CraftTypes) do
+      if e.prefix == cfg.type then
+        Scripttable.Potion.Craft.type = e
+        if Scripttable.Potion.TypeCombo then Scripttable.Potion.TypeCombo:SetValue(i) end
+        break
+      end
+    end
+  end
+  -- 階級 + 同步下拉
+  if type(cfg.tier) == "number" and cfg.tier >= 1 and cfg.tier <= 5 then
+    Scripttable.Potion.Craft.tier = cfg.tier
+    if Scripttable.Potion.TierCombo then Scripttable.Potion.TierCombo:SetValue(cfg.tier) end
+  end
+  -- 自動開關：SetValue 會觸發 callback（設 auto + 視需要啟動迴圈）
+  if type(cfg.auto) == "boolean" then
+    if Scripttable.Potion.AutoToggle then
+      Scripttable.Potion.AutoToggle:SetValue(cfg.auto)
+    else
+      Scripttable.Potion.Craft.auto = cfg.auto
+      if cfg.auto then task.spawn(Mainfunction.autoCraftPotion) end
+    end
+  end
+  if not silent then Msg:Success(T.potion_cfg_loaded) end
+  return true
+end
+
+-- 頂部：製作等級 / 寶石 + 重新整理按鈕
+Scripttable.Potion.InfoLabel = Tab_Potion:Label({ Text = "" })
+Tab_Potion:Button({
+  Text = T.potion_refresh,
+  Callback = function()
+    task.spawn(function()
+      Mainfunction.updPotion()
+      Mainfunction.refreshPotionCells()
+    end)
+  end,
+})
+
+-- 表格本體
+Scripttable.Potion.Table = Tab_Potion:Table({ RowBackground = true, Border = true })
+
+-- 標題列：左上角留白 + T1~T5
+Scripttable.Potion.HeaderRow = Scripttable.Potion.Table:HeaderRow()
+Scripttable.Potion.HeaderRow:Column():Label({ Text = T.potion_corner })
+for t = 1, 5 do
+  Scripttable.Potion.HeaderRow:Column():Label({ Text = "T" .. t })
+end
+
+-- 資料列：每種藥水一列，左欄=類型名稱，後 5 欄=各階級數量
+Scripttable.Potion.Cells = {}  -- Cells[field][tier] = Label
+for _, row in ipairs(Scripttable.Potion.Rows) do
+  local R = Scripttable.Potion.Table:NextRow()
+  R:Column():Label({ Text = T[row.key] or row.field })
+  Scripttable.Potion.Cells[row.field] = {}
+  for t = 1, 5 do
+    Scripttable.Potion.Cells[row.field][t] = R:Column():Label({ Text = "0" })
+  end
+end
+
+Tab_Potion:Separator({ Text = T.potion_craft_sep })
+
+Scripttable.Potion.CraftRow = Tab_Potion:Row()
+-- 類型下拉（預設 幸運 = CraftTypes[5]）
+Scripttable.Potion.TypeCombo = Scripttable.Potion.CraftRow:Combo({
+  Label    = " ",
+  Selected = 5,
+  Items    = Scripttable.Potion.CraftTypeLabels,
+  Callback = function(self, label)
+    for i, e in ipairs(Scripttable.Potion.CraftTypes) do
+      if e.label == label or i == label then Scripttable.Potion.Craft.type = e return end
+    end
+  end,
+})
+-- 階級下拉
+Scripttable.Potion.TierCombo = Scripttable.Potion.CraftRow:Combo({
+  Label    = " ",
+  Selected = 1,
+  Items    = { "T1", "T2", "T3", "T4", "T5" },
+  Callback = function(self, label)
+    Scripttable.Potion.Craft.tier = tonumber(string.match(tostring(label), "%d")) or 1
+  end,
+})
+
+-- 自動製作開關 + 手動儲存（同一排，儲存在開關右邊；開關本身不調用儲存）
+Scripttable.Potion.AutoRow = Tab_Potion:Row()
+Scripttable.Potion.AutoToggle = Scripttable.Potion.AutoRow:Radiobox({
+  Value    = false,
+  Label    = T.potion_auto_craft,
+  TextSize = radioTextSize,
+  Callback = function(self, v)
+    Scripttable.Potion.Craft.auto = v
+    if v then task.spawn(Mainfunction.autoCraftPotion) end
+  end,
+})
+Scripttable.Potion.AutoRow:SmallButton({
+  Text     = T.autodelete_save,
+  Callback = function() Mainfunction.SavePotionConfig() end,
+})
+
+-- 啟動時載入自己（UserId）的設定
+Mainfunction.LoadPotionConfig(true)
+
+-- ========================================================================== --
 -- Tab_Webhook
 local W = Scripttable.Webhook
 
@@ -2153,3 +2550,18 @@ Webhook_SaveRow:SmallButton({
 
 Scripttable.Summon.AutoDelete.UIReady = true
 Scripttable.Webhook.UIReady = true
+
+-- 藥水初始化
+task.spawn(function()
+  Mainfunction.updPotion()
+  Mainfunction.refreshPotionCells()
+end)
+
+-- 輪尋更新（每秒同步背包藥水數量）
+task.spawn(function()
+  while true do
+    task.wait(0.5)
+    Mainfunction.updPotion()
+    Mainfunction.refreshPotionCells()
+  end
+end)
