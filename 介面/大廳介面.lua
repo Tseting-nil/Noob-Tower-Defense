@@ -735,42 +735,39 @@ Mainfunction.Gamepass_Level_Reward = function()
 		for _, Reward in ipairs(list:GetChildren()) do
 			if Reward:IsA("Frame") and Reward.Name ~= "Template" then
 				local Basic_Clicker = Reward.Basic.Container.Item.Frame.Container.Clicker -- 普通(免費)可領取圖標
+				local Basic_Claimable = Reward.Basic.Container.Item.Claimable -- 普通(免費)可領取提示
 				local Basic_Claimed = Reward.Basic.Container.Item.Frame.Container.Claimed -- 普通(免費)已領取圖標
-				local Premium_Locked = Reward.Premium.Container.Item.Frame.Container.Locked -- 付費檢查
+				local Premium_Locked = Reward.Premium.Container.Item.Frame.Container.Locked -- 付費鎖定圖標
 				local Premium_Clicker = Reward.Premium.Container.Item.Frame.Container.Clicker -- 付費可領取圖標
+				local Premium_Claimable = Reward.Premium.Container.Item.Claimable -- 付費可領取提示
 				local Premium_Claimed = Reward.Premium.Container.Item.Frame.Container.Claimed -- 付費已領取圖標
 				local tier = tonumber(Reward.Name)
 				if tier then
-					if Premium_Clicker.Visible and not Premium_Claimed.Visible then
+					local BasicCanClaim = not Basic_Claimed.Visible and (Basic_Clicker.Visible or Basic_Claimable.Visible)
+					local PremiumCanClaim = not Premium_Claimed.Visible and not Premium_Locked.Visible and (Premium_Clicker.Visible or Premium_Claimable.Visible)
+					--print("檢查等級獎勵 " .. tostring(tier) .. "：", "普通可領取=" .. tostring(BasicCanClaim), "普通已領取=" .. tostring(Basic_Claimed.Visible), "高級可領取=" .. tostring(PremiumCanClaim), "高級已領取=" .. tostring(Premium_Claimed.Visible))
+					if PremiumCanClaim then
 						ReplicatedStorage.Remotes.Functions.ClaimTier:InvokeServer(tier)
 						Premium_Clicker.Visible = false
 						Premium_Claimed.Visible = true
 						Basic_Clicker.Visible = false
 						Basic_Claimed.Visible = true
-            print("領取等級 ".. tier .. " 獎勵")
-            if tier == 30 then
-              Msg:Success(T.msg_pass_done)
-              return
-            end
-					elseif Basic_Clicker.Visible and not Basic_Claimed.Visible then
+						print("領取等級 " .. tier .. " 高級獎勵")
+					elseif BasicCanClaim then
 						ReplicatedStorage.Remotes.Functions.ClaimTier:InvokeServer(tier)
 						Basic_Clicker.Visible = false
 						Basic_Claimed.Visible = true
-            print("領取等級 ".. tier .. " 普通獎勵")
-            if tier == 30 then
-              Msg:Success(T.msg_pass_done)
-              return
-            end
-					else
-            if tier == 30 then
-              Msg:Success(T.msg_pass_done)
-              return
-            end
-          end
+						print("領取等級 " .. tier .. " 普通獎勵")
+					end
+					if tier == 30 and not BasicCanClaim and not PremiumCanClaim then
+						Msg:Success(T.msg_pass_done)
+						print("已領取所有等級獎勵")
+						return
+					end
 				end
 			end
 		end
-    task.wait(5)
+		task.wait(5)
 	end
 end
 
