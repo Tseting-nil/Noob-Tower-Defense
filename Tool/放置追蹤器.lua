@@ -580,9 +580,13 @@ local abiLiveTowers = {} -- [model] = { name, order, abilityKeys, gameId, cooldo
 local abiTowerCards = {} -- [model] = { container, widgets[] }
 local abiModelByGameId = {} -- [gameId] = model
 local abiPendingGameIds = {} -- { name, gameId, time }[]
-local abiGameIdCooldownHint = {} -- [gameId][abilityKey] = tick()
+local abiGameIdCooldownHint = {} -- [gameId][abilityKey] = abiGameClock（遊戲時間戳）
 local abiEmptyLabel = nil
 local abiRemoteInFlight = {} -- [gameId:abilityKey] = true
+
+-- 遊戲時間時鐘：每幀累加 dt × 當前遊戲速度。能力冷卻是用「遊戲時間」算的，
+-- x2/x3 速度下時鐘走得快 → 冷卻較快就緒。所有冷卻時間戳一律用這個時鐘（而非真實 tick()）。
+local abiGameClock = 0
 
 -- Forward declaration：在 langBtn / stopAbilityRemoteTriggers 中被呼叫
 local rebuildAllAbilityCards
@@ -592,7 +596,8 @@ local function getAbilityRemaining(info, abilityKey, cooldown)
 	if not t0 then
 		return 0
 	end
-	return math.max(0, cooldown - (tick() - t0))
+	-- 以遊戲時間計：abiGameClock 已含速度倍率，x2/x3 時 elapsed 累積較快
+	return math.max(0, cooldown - (abiGameClock - t0))
 end
 
 local function invokeTowerAbilitySafely(model, abilityKey, cooldown)
@@ -615,7 +620,7 @@ local function invokeTowerAbilitySafely(model, abilityKey, cooldown)
 
 	local gid = info.gameId
 	abiRemoteInFlight[invokeKey] = true
-	info.cooldowns[abilityKey] = tick()
+	info.cooldowns[abilityKey] = abiGameClock
 
 	task.spawn(function()
 		local ok, res = pcall(function()
@@ -2845,10 +2850,10 @@ local function onAbilityTowerAbility(gameId, abilityKey)
 	if gameId and abilityKey then
 		local model = abiModelByGameId[gameId]
 		if model and abiLiveTowers[model] then
-			abiLiveTowers[model].cooldowns[abilityKey] = tick()
+			abiLiveTowers[model].cooldowns[abilityKey] = abiGameClock
 		else
 			abiGameIdCooldownHint[gameId] = abiGameIdCooldownHint[gameId] or {}
-			abiGameIdCooldownHint[gameId][abilityKey] = tick()
+			abiGameIdCooldownHint[gameId][abilityKey] = abiGameClock
 		end
 	end
 end
@@ -3600,6 +3605,9 @@ local abiUpdateTimer = 0
 RunService.Heartbeat:Connect(function(dt)
 	flushHookTaskQueue()
 
+	-- 遊戲時間時鐘前進（含速度倍率）：能力冷卻以遊戲時間計，x2/x3 下冷卻較快就緒
+	abiGameClock = abiGameClock + dt * (lastDetectedSpeed > 0 and lastDetectedSpeed or 1)
+
 	-- === 1. 掃描器（每 0.5 秒）===
 	abiScanTimer = abiScanTimer + dt
 	if abiScanTimer >= 0.5 then
@@ -3706,18 +3714,20 @@ RunService.Heartbeat:Connect(function(dt)
 				w.barText.Text = canUseAbility and T("abilityReady") or T("abilityWaitId")
 				w.fireBtn.TextColor3 = canUseAbility and Theme.Text or Theme.TextDim
 				if canUseAbility and w.autoState.enabled then
-					info.cooldowns[w.key] = tick() - w.cd - 1
+					info.cooldowns[w.key] = abiGameClock - w.cd - 1
 				end
 				continue
 			end
 
-			local elapsed = tick() - t0
+			local elapsed = abiGameClock - t0
 			local remaining = math.max(0, w.cd - elapsed)
 			local fillPct = math.min(elapsed / w.cd, 1)
+				-- 顯示換算成真實秒數（÷ 當前速度），讓倒數貼近實際牆鐘時間
+				local dispRemaining = remaining / (lastDetectedSpeed > 0 and lastDetectedSpeed or 1)
 
 			w.barFill.Size = UDim2.new(fillPct, 0, 1, 0)
 			w.barFill.BackgroundColor3 = remaining > 0 and Theme.Accent or Theme.Success
-			w.barText.Text = remaining > 0 and T("abilityTimerFmt"):format(remaining) or T("abilityReady")
+			w.barText.Text = remaining > 0 and T("abilityTimerFmt"):format(dispRemaining) or T("abilityReady")
 
 			local canFire = canUseAbility and remaining == 0
 			w.fireBtn.TextColor3 = canFire and Theme.Text or Theme.TextDim
