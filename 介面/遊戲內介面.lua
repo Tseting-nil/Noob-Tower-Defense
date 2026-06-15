@@ -107,6 +107,17 @@ local i18n = {
 		onText = "開", offText = "關",
 		instantUpdateConfirmTitle = "確認關閉自動更新？",
 		instantUpdateConfirmDesc  = "關閉後主腳本只會在『大廳』更新，掛機中途不會被打斷。",
+		tab_stats              = "統計",
+		stats_section          = "累計統計",
+		stats_wins             = "勝：",
+		stats_losses           = "輸：",
+		stats_total            = "總場：",
+		stats_winrate          = "勝率：",
+		stats_money            = "賺取金幣：",
+		stats_lastReset        = "上次重置：",
+		stats_reset            = "重置統計",
+		stats_reset_confirm    = "確認重置統計？",
+		stats_never_reset      = "從未重置",
 	},
 	en = {
 		windowTitle    = "In-Game UI",
@@ -180,6 +191,17 @@ local i18n = {
 		onText = "ON", offText = "OFF",
 		instantUpdateConfirmTitle = "Disable auto update?",
 		instantUpdateConfirmDesc  = "When off, the main script only updates in the LOBBY — farming won't be interrupted.",
+		tab_stats              = "Stats",
+		stats_section          = "Cumulative Stats",
+		stats_wins             = "Wins: ",
+		stats_losses           = "Losses: ",
+		stats_total            = "Total: ",
+		stats_winrate          = "Win Rate: ",
+		stats_money            = "Coins Earned: ",
+		stats_lastReset        = "Last Reset: ",
+		stats_reset            = "Reset Stats",
+		stats_reset_confirm    = "Confirm Reset?",
+		stats_never_reset      = "Never reset",
 	},
 }
 
@@ -212,7 +234,8 @@ for _, Name in ipairs({
 	L.tab_main,
   L.tab_playinfo,
   L.tab_localscript,
-  L.tab_settings
+  L.tab_settings,
+  L.tab_stats
 }) do
 	local Tab = TabsWindow:CreateTab({
 		Name = Name
@@ -249,6 +272,11 @@ local Tab_Localscript = Tabs[3]:ScrollingCanvas({
 })
 
 local Tab_settings = Tabs[4]:ScrollingCanvas({
+	Fill = true,
+	UiPadding = UDim.new(0, 0)
+})
+
+local Tab_stats = Tabs[5]:ScrollingCanvas({
 	Fill = true,
 	UiPadding = UDim.new(0, 0)
 })
@@ -922,3 +950,218 @@ Localscript.ScriptListTable = Tab_Localscript:Table({
 })
 
 BuildScriptList()
+
+-- ========================================================================== --
+-- Tab_stats
+-- ========================================================================== --
+local STATS_DATA_PATH = "Tsetingnil_script/NTD/Config/Ingame_Data_Config.json"
+local Stats_LocalPlayer = game:GetService("Players").LocalPlayer
+local Stats_playerId    = tostring(Stats_LocalPlayer.UserId)
+
+local function statsEnsureFolder()
+	pcall(function()
+		if not isfolder or not makefolder then return end
+		if not isfolder("Tsetingnil_script") then makefolder("Tsetingnil_script") end
+		if not isfolder("Tsetingnil_script/NTD") then makefolder("Tsetingnil_script/NTD") end
+		if not isfolder("Tsetingnil_script/NTD/Config") then makefolder("Tsetingnil_script/NTD/Config") end
+	end)
+end
+
+local function statsReadAll()
+	local ok, data = pcall(function()
+		if not (isfile and isfile(STATS_DATA_PATH) and readfile) then return {} end
+		return HttpService:JSONDecode(readfile(STATS_DATA_PATH))
+	end)
+	return (ok and type(data) == "table") and data or {}
+end
+
+local function statsWriteAll(allData)
+	pcall(function()
+		if not writefile then return end
+		statsEnsureFolder()
+		writefile(STATS_DATA_PATH, HttpService:JSONEncode(allData))
+	end)
+end
+
+local function statsGetOrInit(allData)
+	if not allData[Stats_playerId] then
+		allData[Stats_playerId] = {
+			lastReset = os.time(),
+			wins      = 0,
+			losses    = 0,
+			money     = 0,
+		}
+		statsWriteAll(allData)
+	end
+	return allData[Stats_playerId]
+end
+
+local function statsSave(isWin, earned)
+	local allData = statsReadAll()
+	local pd = statsGetOrInit(allData)
+	if isWin then
+		pd.wins = pd.wins + 1
+	else
+		pd.losses = pd.losses + 1
+	end
+	pd.money = pd.money + earned
+	allData[Stats_playerId] = pd
+	statsWriteAll(allData)
+	return pd
+end
+
+local function statsReset()
+	local allData = statsReadAll()
+	allData[Stats_playerId] = {
+		lastReset = os.time(),
+		wins      = 0,
+		losses    = 0,
+		money     = 0,
+	}
+	statsWriteAll(allData)
+	return allData[Stats_playerId]
+end
+
+local function statsParseEarned(richText)
+	local raw = richText:match("%(+([%d,]+)%)")
+	if not raw then return 0 end
+	return tonumber(raw:gsub(",", "")) or 0
+end
+
+local function statsComma(n)
+	local s = tostring(math.floor(n))
+	return s:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+end
+
+local function statsFmtWinRate(wins, losses)
+	local total = wins + losses
+	if total == 0 then return "0.0%" end
+	return string.format("%.1f%%", wins / total * 100)
+end
+
+local function statsFmtTime(ts)
+	if not ts or ts == 0 then return L.stats_never_reset end
+	return os.date("%Y-%m-%d %H:%M:%S", ts)
+end
+
+-- 初始載入
+local _statsAllData = statsReadAll()
+local _statsPd      = statsGetOrInit(_statsAllData)
+
+-- UI
+Tab_stats:Separator({ Text = L.stats_section })
+
+local statsLabel_wins = Tab_stats:Label({
+	Text = L.stats_wins .. _statsPd.wins,
+	TextSize = fontSize or 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+local statsLabel_losses = Tab_stats:Label({
+	Text = L.stats_losses .. _statsPd.losses,
+	TextSize = fontSize or 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+local statsLabel_total = Tab_stats:Label({
+	Text = L.stats_total .. (_statsPd.wins + _statsPd.losses),
+	TextSize = fontSize or 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+local statsLabel_winrate = Tab_stats:Label({
+	Text = L.stats_winrate .. statsFmtWinRate(_statsPd.wins, _statsPd.losses),
+	TextSize = fontSize or 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+local statsLabel_money = Tab_stats:Label({
+	Text = L.stats_money .. statsComma(_statsPd.money),
+	TextSize = fontSize or 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+local statsLabel_lastReset = Tab_stats:Label({
+	Text = L.stats_lastReset .. statsFmtTime(_statsPd.lastReset),
+	TextSize = fontSize or 14,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(180, 180, 180),
+})
+
+local function refreshStatsUI(pd)
+	statsLabel_wins.Text      = L.stats_wins      .. pd.wins
+	statsLabel_losses.Text    = L.stats_losses    .. pd.losses
+	statsLabel_total.Text     = L.stats_total     .. (pd.wins + pd.losses)
+	statsLabel_winrate.Text   = L.stats_winrate   .. statsFmtWinRate(pd.wins, pd.losses)
+	statsLabel_money.Text     = L.stats_money     .. statsComma(pd.money)
+	statsLabel_lastReset.Text = L.stats_lastReset .. statsFmtTime(pd.lastReset)
+end
+
+Tab_stats:Button({
+	Text = L.stats_reset,
+	TextSize = fontSize or 16,
+	Callback = function(btn)
+		local Popup = Tab_stats:PopupModal({ RelativeTo = btn })
+		Popup:Separator({ Text = L.stats_reset_confirm })
+		local PopupRow = Popup:Row({ Expanded = true })
+		PopupRow:Button({
+			Text = L.localscript_confirm_yes,
+			Callback = function()
+				Popup:ClosePopup()
+				local pd = statsReset()
+				refreshStatsUI(pd)
+			end,
+		})
+		PopupRow:Button({
+			Text = L.localscript_confirm_no,
+			Callback = function()
+				Popup:ClosePopup()
+			end,
+		})
+	end,
+})
+
+-- GameOver 偵測
+task.spawn(function()
+	local ok, GameOver = pcall(function()
+		return Stats_LocalPlayer:WaitForChild("PlayerGui", 30):WaitForChild("UI", 30):WaitForChild("Game", 30):WaitForChild("GameOver", 30)
+	end)
+	if not ok or not GameOver then return end
+
+	local CoinsTitle = GameOver.Info.Currencies.Coins.Title
+
+	GameOver:GetPropertyChangedSignal("Visible"):Connect(function()
+		if not GameOver.Visible then return end
+
+		local titleText = GameOver.Victory.Title.Text
+		local isWin  = titleText == "VICTORY!"
+		local isLoss = titleText == "DEFEAT!"
+		if not (isWin or isLoss) then return end
+
+		-- 等 UpdateCurrencies 把金幣文字寫入，最多 2 秒
+		local recorded = false
+		local conn
+		conn = CoinsTitle:GetPropertyChangedSignal("Text"):Connect(function()
+			if recorded then return end
+			recorded = true
+			conn:Disconnect()
+			local pd = statsSave(isWin, statsParseEarned(CoinsTitle.Text))
+			refreshStatsUI(pd)
+		end)
+
+		task.delay(2, function()
+			if not recorded then
+				recorded = true
+				if conn.Connected then conn:Disconnect() end
+				-- UpdateCurrencies 未到（金幣 0 或已滿），只記輸贏
+				local pd = statsSave(isWin, 0)
+				refreshStatsUI(pd)
+			end
+		end)
+	end)
+end)

@@ -194,6 +194,8 @@ local Lang = {
 		lblRecordMutationDesc = "開啟後腳本將記錄塔的所有附魔/突變（停用時僅記錄閃亮塔）",
 		lblCostMode = "成本版錄製（無時間）",
 		lblCostModeDesc = "開啟後生成腳本用消耗($)當閘門、錢夠才動作；對收入/難度差異更穩，適合掛機重播",
+		lblSkipPhase2Load = "停用 Phase2 無名後綴搜尋",
+		lblSkipPhase2LoadDesc = "開啟後切到第二張圖時，無指定名稱不會自動後綴搜尋舊外部 Phase2（指定名稱仍會載入）；錄新 Phase2 時開，錄完關掉",
 		lblFileName = "輸入腳本名稱:",
 		phFileName = "輸入腳本名稱...",
 		infoFmt = "地圖: %s\n難易度: %s\n效果: %s\n自動跳波: %s",
@@ -277,6 +279,8 @@ local Lang = {
 		lblRecordMutationDesc = "Includes all tower enchants/mutations in scripts (Shiny is always recorded)",
 		lblCostMode = "Cost-based recording (no time)",
 		lblCostModeDesc = "Generated script gates by cost ($) instead of time; robust to income/difficulty differences, ideal for AFK replay",
+		lblSkipPhase2Load = "Disable Phase2 suffix auto-search",
+		lblSkipPhase2LoadDesc = "When on, switching to the 2nd map won't auto suffix-search an old external Phase2 unless a name is specified (named loads still work); enable while recording a new Phase2, disable after",
 		lblFileName = "Script name:",
 		phFileName = "Enter script name...",
 		infoFmt = "Map: %s\nDifficulty: %s\nModifier: %s\nAuto Skip: %s",
@@ -1626,6 +1630,12 @@ createToggle("lblCostMode", paramScrollFrame, 16, ScriptSettings.CostMode, funct
 	ScriptSettings.CostMode = v
 end, "lblCostModeDesc")
 
+-- 錄製階段用：開啟後切到第二張圖時，「無指定名稱」不自動後綴搜尋舊外部 Phase2
+-- （指定名稱仍照常載入）。直接寫 getgenv().NTD_SkipPhase2Load，由 API(測試版) 切圖時讀取。
+createToggle("lblSkipPhase2Load", paramScrollFrame, 17, getgenv().NTD_SkipPhase2Load == true, function(v)
+	getgenv().NTD_SkipPhase2Load = v
+end, "lblSkipPhase2LoadDesc")
+
 -- ============================================================
 -- 拖移功能
 -- ============================================================
@@ -1986,11 +1996,12 @@ local function writeOp(lines, op)
 	local isCostGated = ScriptSettings.CostMode and (op.type == "place" or op.type == "upgrade")
 	local gate, tag
 	if isCostGated then
+		-- 優先用查表修正後的牌價（op.correctedCost）；查不到才退回錄製時的金錢 delta 推算值
 		local opCost = 0
 		if op.type == "place" then
-			opCost = (op.info and op.info.cost) or 0
+			opCost = op.correctedCost or (op.info and op.info.cost) or 0
 		elseif op.type == "upgrade" then
-			opCost = op.cost or 0
+			opCost = op.correctedCost or op.cost or 0
 		end
 		gate = string.format('"%d"', math.max(0, math.floor(opCost + 0.5)))
 		tag = "$" .. tostring(math.max(0, math.floor(opCost + 0.5)))
@@ -2102,12 +2113,96 @@ local function buildOperations()
 	return operations
 end
 
+-- ============================================================
+-- 成本查表修正
+-- 錄製時的成本是用 leaderstats.Coins 的變化量(delta)推算的，在地圖切換 /
+-- 同幀收入 / Changed 事件合併 / 退款時會把「非花費」的金錢變動誤記成塔價
+-- （例：Saturn 第二張地圖首塔 Blaze 750 被記成 3500，且 FIFO 連鎖污染後續）。
+-- 這裡用遊戲權威塔表 Towers.<name>.Levels[lvl].Price 覆寫成本，免疫上述所有情況。
+--   放置  → Levels[1].Price（閃亮塔 × SHINY_PRICE_MULTIPLIER）
+--   升級N → Levels[N].Price（第 N 級的牌價）
+-- 查不到（未知塔 / 等級超出表）則保留原 delta 值當退路。
+-- ============================================================
+-- 閃亮塔放置與升級都是原價 +10%（×1.1，已確認）。
+local SHINY_AFFECTS_UPGRADE = true
+local SHINY_MULT_FALLBACK = 1.1
+
+local function getShinyMultiplier()
+	-- 優先讀遊戲 _G 的權威值（未來改版自動跟上）；讀不到就用已確認的 1.1
+	local ok, mult = pcall(function()
+		local genv = getrenv and getrenv()
+		local g = genv and rawget(genv, "_G")
+		return g and g.SHINY_PRICE_MULTIPLIER
+	end)
+	if ok and type(mult) == "number" and mult > 0 then
+		return mult
+	end
+	return SHINY_MULT_FALLBACK
+end
+
+-- 取第 level 級的牌價（1 = 放置；2,3.. = 升級到該級）；查不到回 nil
+local function getTablePrice(towerName, level)
+	if not towerName or type(TowersData.getTowerData) ~= "function" then
+		return nil
+	end
+	local ok, td = pcall(TowersData.getTowerData, towerName)
+	if not ok or type(td) ~= "table" or type(td.Levels) ~= "table" then
+		return nil
+	end
+	local lv = td.Levels[level]
+	if type(lv) ~= "table" or type(lv.Price) ~= "number" then
+		return nil
+	end
+	return lv.Price
+end
+
+local function isOrderShiny(order)
+	local info = order and orderToInfo[order]
+	local pdata = info and info.UUID and towerUUIDData[info.UUID]
+	return pdata and pdata.mutations and pdata.mutations.Shiny == true
+end
+
+-- 走訪「已按 elapsed 排好序」的 operations，依每塔等級查表覆寫成本 → op.correctedCost
+local function applyTablePriceCorrection(operations)
+	if not ScriptSettings.CostMode then
+		return
+	end
+	local shinyMult = getShinyMultiplier()
+	local levelByOrder = {}
+	for _, op in ipairs(operations) do
+		if op.type == "place" and op.order then
+			levelByOrder[op.order] = 1
+			local name = op.info and op.info.UnitType
+			local price = getTablePrice(name, 1)
+			if price then
+				if shinyMult and isOrderShiny(op.order) then
+					price = price * shinyMult
+				end
+				op.correctedCost = math.max(0, math.floor(price + 0.5))
+			end
+		elseif op.type == "upgrade" and op.order then
+			local lvl = (levelByOrder[op.order] or 1) + 1
+			levelByOrder[op.order] = lvl
+			local info = orderToInfo[op.order]
+			local name = info and info.UnitType
+			local price = getTablePrice(name, lvl)
+			if price then
+				if shinyMult and SHINY_AFFECTS_UPGRADE and isOrderShiny(op.order) then
+					price = price * shinyMult
+				end
+				op.correctedCost = math.max(0, math.floor(price + 0.5))
+			end
+		end
+	end
+end
+
 local function generatePhase2Script()
 	local transition = mapTransitionLog[1]
 	if not transition then
 		return nil
 	end
 	local operations = buildOperations()
+	applyTablePriceCorrection(operations)
 	local lines = {}
 	table.insert(lines, "--[[")
 	table.insert(lines, "")
@@ -2199,6 +2294,7 @@ local function generateScript(mode)
 	end
 
 	local operations = buildOperations()
+	applyTablePriceCorrection(operations)
 
 	local fullLines = {}
 	table.insert(fullLines, "--[[")

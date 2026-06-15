@@ -749,13 +749,16 @@ Mainfunction.Gamepass_Level_Reward = function()
 					if PremiumCanClaim then
 						ReplicatedStorage.Remotes.Functions.ClaimTier:InvokeServer(tier)
 						Premium_Clicker.Visible = false
+            Premium_Claimable.Visible = false
 						Premium_Claimed.Visible = true
 						Basic_Clicker.Visible = false
+            Basic_Claimable.Visible = false
 						Basic_Claimed.Visible = true
 						print("領取等級 " .. tier .. " 高級獎勵")
 					elseif BasicCanClaim then
 						ReplicatedStorage.Remotes.Functions.ClaimTier:InvokeServer(tier)
 						Basic_Clicker.Visible = false
+            Basic_Claimable.Visible = false
 						Basic_Claimed.Visible = true
 						print("領取等級 " .. tier .. " 普通獎勵")
 					end
