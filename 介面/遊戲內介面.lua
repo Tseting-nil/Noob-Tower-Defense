@@ -1025,7 +1025,7 @@ end
 local function statsParseEarned(richText)
 	local raw = richText:match("%(%+([%d,]+)%)")
 	if not raw then return 0 end
-	return tonumber(raw:gsub(",", "")) or 0
+	return tonumber((raw:gsub(",", ""))) or 0
 end
 
 local function statsComma(n)
