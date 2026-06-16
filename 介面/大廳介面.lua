@@ -43,9 +43,20 @@ local L = {
 		title             = "大廳腳本",
 		tab_main          = "主頁",
 		tab_summon       = "抽取",
+    tab_shop          = "商店",
     tab_localscript   = "本地腳本管理",
     tab_webhook       = "Webhook",
 		author            = "作者: Tseting-nil",
+		shop_coins          = "金幣: %s",
+		shop_coincrate      = "金幣箱子",
+		shop_auto_coincrate = "自動購買金幣箱子",
+		shop_speed          = "購買速度 = %.1f",
+		shop_no_coins       = "金幣不足，已停止購買",
+		shop_opencrate_sep  = "開啟箱子",
+		shop_auto_opencrate = "自動開啟箱子",
+		shop_no_crates      = "箱子不足，已停止開啟",
+		shop_open_result    = "開箱結果",
+		shop_clear          = "清除",
 		sep_auto_collect  = "自動領取",
 		sep_battlepass    = "戰鬥通行證",
 		sep_misc          = "雜項",
@@ -200,7 +211,7 @@ local L = {
 		potion_refresh    = "重新整理",
 		potion_level      = "製作等級",
 		potion_gems       = "寶石",
-		potion_corner     = [[藥水\等級]],
+		potion_corner     = [[等級\藥水]],
 		-- Potion 自動製作
 		potion_craft_sep     = "(藥水 | 等級)",
 		potion_auto_craft    = "自動製作藥水",
@@ -220,9 +231,20 @@ local L = {
 		title             = "Lobby Script",
 		tab_main          = "Main",
 		tab_summon       = "Summon",
+    tab_shop          = "Shop",
     tab_localscript   = "Local Script Manager",
     tab_webhook       = "Webhook",
 		author            = "Author: Tseting-nil",
+		shop_coins          = "Coins: %s",
+		shop_coincrate      = "Coin Crate",
+		shop_auto_coincrate = "Auto Buy Coin Crate",
+		shop_speed          = "Buy Speed = %.1f",
+		shop_no_coins       = "Not enough coins, stopped",
+		shop_opencrate_sep  = "Open Crates",
+		shop_auto_opencrate = "Auto Open Crates",
+		shop_no_crates      = "Not enough crates, stopped",
+		shop_open_result    = "Open Results",
+		shop_clear          = "Clear",
 		sep_auto_collect  = "Auto Collect",
 		sep_battlepass    = "Battle Pass",
 		sep_misc          = "Misc",
@@ -376,7 +398,7 @@ local L = {
 		potion_refresh    = "Refresh",
 		potion_level      = "Crafting Lvl",
 		potion_gems       = "Gems",
-		potion_corner     = [[Potion\Tier]],
+		potion_corner     = [[Tier\Potion]],
 		-- Potion auto craft
 		potion_craft_sep     = "(Potion | Tier)",
 		potion_auto_craft    = "Auto Craft Potion",
@@ -468,6 +490,17 @@ local Scripttable = {
 	},
 	blockFavouritePrompt = true,
   Skip_Enchanting = false,
+  Shop = {
+    AutoBuyCoinCrate = false,
+    BuyInterval = 1,
+    BuyIndex = 1,        -- BuyCoinCrate 的參數＝選項序號：1=x1 / 2=x3 / 3=x10
+    BuyTier  = "x1",     -- 對應 CoinCrate 的成本鍵
+    CoinCrate = {x1 = {Coins = 1500 ,enabled = false}, x3 = {Coins = 4500, enabled = false}, x10 = {Coins = 15000, enabled = false}},
+    -- 自動開箱（UseItem:InvokeServer(箱子名, 次數)；次數 1 或 3）
+    AutoOpenCrate = false,
+    OpenCrateName = nil,  -- 選中的箱子（啟動時取第一個）
+    OpenAmount    = 1,    -- 一次開幾個 (1/3)
+  },
   Localscript = {
     path = "Tsetingnil_script/NTD/Script", -- 用正斜線：腳本以 / 路徑儲存，部分手機執行器不會正規化 \
     Excluded = {"_Venus", "_Saturn", "_Mars"},
@@ -485,6 +518,8 @@ local Scripttable = {
     T3 = {exp = 0, coin = 0, dmg = 0, shiny = 0, lucky = 0, time = 420, spend = 75, level = 0},
     T4 = {exp = 0, coin = 0, dmg = 0, shiny = 0, lucky = 0, time = 1800, spend = 100, level = 25},
     T5 = {exp = 0, coin = 0, dmg = 0, shiny = 0, lucky = 0, time = 7200, spend = 250, level = 50},
+    T6 = {exp = 0, coin = 0, dmg = 0, shiny = 0, lucky = 0},  -- 僅顯示數量（製作仍 T1-T5）
+    MaxTier = 6,  -- 表格顯示到 T6（遊戲現有最高階）
     level = 1,
     gems = 0,
   },
@@ -1364,6 +1399,7 @@ local Tabs = {}
 for _, Name in ipairs({
 	T.tab_main,
 	T.tab_summon,
+  T.tab_shop,
   T.tab_localscript,
   T.tab_potion,
   T.tab_webhook
@@ -1401,17 +1437,22 @@ local Tab_Summon = Tabs[2]:ScrollingCanvas({
 	UiPadding = UDim.new(0, 0)
 })
 
-local Tab_Localscript = Tabs[3]:ScrollingCanvas({
+local Tab_Shop = Tabs[3]:ScrollingCanvas({
 	Fill = true,
 	UiPadding = UDim.new(0, 0)
 })
 
-local Tab_Potion = Tabs[4]:ScrollingCanvas({
+local Tab_Localscript = Tabs[4]:ScrollingCanvas({
+	Fill = true,
+	UiPadding = UDim.new(0, 0)
+})
+
+local Tab_Potion = Tabs[5]:ScrollingCanvas({
   Fill = true,
   UiPadding = UDim.new(0, 0)
 })
 
-local Tab_Webhook = Tabs[5]:ScrollingCanvas({
+local Tab_Webhook = Tabs[6]:ScrollingCanvas({
   Fill = true,
   UiPadding = UDim.new(0, 0)
 })
@@ -1970,6 +2011,297 @@ for _, cfg in ipairs(_PityConfig) do
 end
 
 -- ========================================================================== --
+-- Tab_Shop（商店）
+
+local _shopCoinCrateToggle   -- 自動購買開關（金幣不足時用來關掉 UI）
+local _shopOpenCrateToggle   -- 自動開箱開關（箱子不足時用來關掉 UI）
+local _crateCombo            -- 箱子下拉（更新預覽用）
+local _shopConsole           -- 開箱結果 Console（顯示開到的物品）
+
+-- 自動購買金幣箱子：BuyCoinCrate:InvokeServer(選項序號)，序號由下拉選單選 (1=x1 / 2=x3 / 3=x10)
+-- 金幣不足自動停：買之前先用 Shop.CoinCrate[檔].Coins 與當前金幣比對
+Mainfunction.AutoBuyCoinCrate = function()
+  local BuyRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("BuyCoinCrate")
+  while Scripttable.Shop.AutoBuyCoinCrate do
+    local idx  = Scripttable.Shop.BuyIndex or 1
+    local tier = Scripttable.Shop.CoinCrate[Scripttable.Shop.BuyTier or "x1"]
+    local cost = (tier and tier.Coins) or 0
+    local coinObj = Gametable.LocalPlayer:FindFirstChild("Coins")
+    local coins = (coinObj and coinObj.Value) or 0
+    if coins < cost then
+      Scripttable.Shop.AutoBuyCoinCrate = false
+      if _shopCoinCrateToggle then pcall(function() _shopCoinCrateToggle:SetValue(false) end) end
+      Msg:Warning(T.shop_no_coins)
+      break
+    end
+    pcall(function() BuyRemote:InvokeServer(idx) end)
+    task.wait(Scripttable.Shop.BuyInterval)
+  end
+end
+
+-- 即時金幣顯示
+local _shopCommaNumber = function(n)
+  local s = tostring(math.floor(tonumber(n) or 0))
+  local k
+  repeat s, k = s:gsub("^(-?%d+)(%d%d%d)", "%1,%2") until k == 0
+  return s
+end
+local ShopCoinsLabel = Tab_Shop:Label({ Text = string.format(T.shop_coins, "0") })
+task.spawn(function()
+  while true do
+    local coinObj = Gametable.LocalPlayer:FindFirstChild("Coins")
+    local txt = string.format(T.shop_coins, _shopCommaNumber(coinObj and coinObj.Value or 0))
+    if ShopCoinsLabel.Text ~= txt then ShopCoinsLabel.Text = txt end  -- 只在變動才寫
+    task.wait(0.3)
+  end
+end)
+
+Tab_Shop:Separator({ Text = T.shop_coincrate })
+
+-- 自動購買開關
+_shopCoinCrateToggle = Tab_Shop:Radiobox({
+  Value = false,
+  Label = T.shop_auto_coincrate,
+  TextSize = radioTextSize,
+  Callback = function(self, Value)
+    Scripttable.Shop.AutoBuyCoinCrate = Value
+    if Value then
+      task.spawn(Mainfunction.AutoBuyCoinCrate)
+    end
+  end,
+})
+
+-- 購買速度（前）+ 檔位下拉 x1/x3/x10（後），同一排
+-- 下拉每項 = { index = 給 BuyCoinCrate 的序號, key = 成本鍵 }
+local _shopItems   = { "x1", "x3", "x10" }              -- combo 第 N 項 → 標籤
+local _shopOptions = {                                  -- 標籤 → { index, key }
+  x1  = { index = 1, key = "x1"  },
+  x3  = { index = 2, key = "x3"  },
+  x10 = { index = 3, key = "x10" },
+}
+local ShopRow = Tab_Shop:Row()
+ShopRow:SliderFloat({
+  Label = "",
+  Value = Scripttable.Shop.BuyInterval,
+  Minimum = 0.2,
+  Maximum = 2,
+  Format = T.shop_speed,
+  Callback = function(self, Value)
+    Scripttable.Shop.BuyInterval = tonumber(string.format("%.1f", Value))
+  end,
+})
+ShopRow:Combo({
+  Label = " ",
+  Selected = 1,
+  Items = _shopItems,
+  Callback = function(self, label)
+    -- label 可能是字串("x3")或 combo 索引(數字)
+    local lbl = (type(label) == "number") and _shopItems[label] or tostring(label)
+    local opt = _shopOptions[lbl]
+    if opt then
+      Scripttable.Shop.BuyIndex = opt.index
+      Scripttable.Shop.BuyTier  = opt.key
+    end
+  end,
+})
+
+-- ---- 自動開啟箱子 ----
+-- 從 LocalPlayer.Crates 讀箱子清單與數量（穩定排序）
+local function _readCrates()
+  local out = {}
+  local folder = Gametable.LocalPlayer:FindFirstChild("Crates")
+  if folder then
+    for _, obj in ipairs(folder:GetChildren()) do
+      local ok, val = pcall(function() return obj.Value end)
+      out[#out + 1] = { name = obj.Name, count = (ok and type(val) == "number") and math.floor(val) or 0 }
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+  end
+  return out
+end
+
+-- 依最大數量決定位數（2 或 3 位…超過再加），數量補零對齊
+local function _crateDigits(crates)
+  local maxc = 0
+  for _, c in ipairs(crates) do if c.count > maxc then maxc = c.count end end
+  return math.max(2, #tostring(maxc))
+end
+local function _crateLabel(name, count, width)
+  return string.format("%s  %0" .. width .. "d", name, count)
+end
+-- GetItems：每次打開下拉即時回傳「箱子 數量」標籤
+local function _crateItems()
+  local crates = _readCrates()
+  local width = _crateDigits(crates)
+  local items = {}
+  for _, c in ipairs(crates) do
+    items[#items + 1] = _crateLabel(c.name, c.count, width)
+  end
+  return items
+end
+
+-- 解析開到的獎勵：UseItem 回傳的 data.reward 是 cratesModule.Crates[箱子].Rewards[索引]
+-- 的「索引」（無 Rewards 池的箱子 → 索引本身就是塔名），再用 itemsModule/towersData 轉成名稱/稀有度
+local _rarityHex = {
+  Common = "#B0B0B0", Rare = "#3B9DFF", Epic = "#B14CFF", Legendary = "#FFB347",
+  Mythic = "#FF4C7D", Secret = "#FF0033", Exclusive = "#FFD700",
+}
+-- 箱子定義模組（直接 require：ReplicatedStorage.Modules.Data.Crates；快取）
+local _cratesModule
+local function _getCratesModule()
+  if _cratesModule == nil then
+    local ok, mod = pcall(function()
+      return require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Crates"))
+    end)
+    _cratesModule = (ok and type(mod) == "table") and mod or false
+  end
+  return _cratesModule or nil
+end
+
+local function _resolveOpenedReward(crateName, rewardVal)
+  local mod     = _getCratesModule()
+  local crates  = mod and mod.Crates
+  local crate   = (type(crates) == "table") and crates[crateName] or nil
+  local rewards = (type(crate) == "table") and crate.Rewards or nil
+  local r       = (type(rewards) == "table") and rewards[rewardVal] or nil
+  if type(r) ~= "table" then r = { Type = "Tower", Item = rewardVal } end  -- 無池(如 MysteryBox) → 索引即塔名
+  local info = { amount = r.Amount }
+  if r.Type == "Tower" then
+    info.isTower = true
+    info.name = _formatTowerName(tostring(r.Item))
+    info.rarity = _getRarity(r.Item)
+  else
+    local idata = _ItemsData and _ItemsData.Items and _ItemsData.Items[r.Item]
+    info.name = (idata and idata.Name) or tostring(r.Item)
+    info.rarity = idata and idata.Rarity or nil
+  end
+  return info
+end
+
+-- 寫一行到開箱 Console（RichText 依稀有度上色）
+local function _shopConsoleWrite(info)
+  if not _shopConsole then return end
+  local amount = info.amount and (" ×" .. _shopCommaNumber(info.amount)) or ""
+  local line
+  if info.rarity then
+    local rname = T["rarity_" .. info.rarity] or info.rarity
+    local hex = _rarityHex[info.rarity] or "#FFFFFF"
+    line = string.format('<font color="%s">[%s] %s%s</font>', hex, rname, info.name, amount)
+  else
+    line = tostring(info.name) .. amount
+  end
+  pcall(function() _shopConsole:AppendText(line) end)
+end
+
+-- 自動開箱：UseItem:InvokeServer(箱子名, 次數) → 回傳 (success, data)
+--   剩餘數量 < 次數 → 自動停；成功時把 data.reward 解析後寫進 Console
+Mainfunction.AutoOpenCrate = function()
+  local UseItem = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("UseItem")
+  while Scripttable.Shop.AutoOpenCrate do
+    local name = Scripttable.Shop.OpenCrateName
+    local amt  = Scripttable.Shop.OpenAmount or 1
+    local folder = Gametable.LocalPlayer:FindFirstChild("Crates")
+    local obj = name and folder and folder:FindFirstChild(name)
+    local count = (obj and obj.Value) or 0
+    if not name or count < amt then
+      Scripttable.Shop.AutoOpenCrate = false
+      if _shopOpenCrateToggle then pcall(function() _shopOpenCrateToggle:SetValue(false) end) end
+      Msg:Warning(T.shop_no_crates)
+      break
+    end
+    local ok, success, data = pcall(function() return UseItem:InvokeServer(name, amt) end)
+    if ok and success and type(data) == "table" and data.reward ~= nil then
+      -- 多抽 → data.reward 是索引陣列；單抽 → 單一索引
+      local list = (type(data.reward) == "table") and data.reward or { data.reward }
+      for _, rv in ipairs(list) do
+        _shopConsoleWrite(_resolveOpenedReward(name, rv))
+      end
+    end
+    task.wait(Scripttable.Shop.BuyInterval)  -- 共用「購買速度」
+  end
+end
+
+Tab_Shop:Separator({ Text = T.shop_opencrate_sep })
+
+-- Row：選箱子（前）+ 選開的次數 ×1/×3（後）
+local _openItems = { "×1", "×3" }
+local CrateRow = Tab_Shop:Row()
+_crateCombo = CrateRow:Combo({
+  Label = " ",
+  Selected = 1,
+  Items = _crateItems(),     -- 初始
+  GetItems = _crateItems,    -- 打開時即時刷新
+  Callback = function(self, label)
+    local name = tostring(label):match("^(%S+)")   -- 取「箱子名 數量」前段
+    local folder = Gametable.LocalPlayer:FindFirstChild("Crates")
+    if name and folder and folder:FindFirstChild(name) then
+      Scripttable.Shop.OpenCrateName = name        -- 只接受真實存在的箱子名
+    end
+  end,
+})
+CrateRow:Combo({
+  Label = " ",
+  Selected = 1,
+  Items = _openItems,
+  Callback = function(self, label)
+    local lbl = (type(label) == "number") and _openItems[label] or tostring(label)
+    Scripttable.Shop.OpenAmount = tonumber(tostring(lbl):match("%d+")) or 1
+  end,
+})
+
+-- 開關
+_shopOpenCrateToggle = Tab_Shop:Radiobox({
+  Value = false,
+  Label = T.shop_auto_opencrate,
+  TextSize = radioTextSize,
+  Callback = function(self, Value)
+    Scripttable.Shop.AutoOpenCrate = Value
+    if Value then task.spawn(Mainfunction.AutoOpenCrate) end
+  end,
+})
+
+-- 開箱結果 Console（顯示開到的物品；RichText 上色、自動捲到底、上限 300 行）
+do
+  local ResultRow = Tab_Shop:Row({ Expanded = true })
+  ResultRow:Label({ Text = T.shop_open_result })
+  ResultRow:SmallButton({
+    Text     = T.shop_clear,
+    Callback = function() if _shopConsole then pcall(function() _shopConsole:Clear() end) end end,
+  })
+end
+_shopConsole = Tab_Shop:Console({
+  Value       = "",
+  ReadOnly    = true,
+  RichText    = true,
+  Border      = true,
+  AutoScroll  = true,
+  TextWrapped = true,
+  Size        = UDim2.new(1, 0, 0, isMobile and 120 or 160),
+})
+
+-- 預設/修正選中箱子 + 即時更新下拉預覽（箱子 當前數量）
+task.spawn(function()
+  while true do
+    local crates = _readCrates()
+    if #crates > 0 then
+      -- 目前選的若不是有效箱子（含啟動時 nil）→ 預設第一個
+      local valid = false
+      for _, c in ipairs(crates) do
+        if c.name == Scripttable.Shop.OpenCrateName then valid = true break end
+      end
+      if not valid then Scripttable.Shop.OpenCrateName = crates[1].name end
+      -- 更新預覽文字
+      local width = _crateDigits(crates)
+      local name = Scripttable.Shop.OpenCrateName
+      local count = 0
+      for _, c in ipairs(crates) do if c.name == name then count = c.count break end end
+      pcall(function() _crateCombo:SetValueText(_crateLabel(name, count, width)) end)
+    end
+    task.wait(0.3)
+  end
+end)
+
+-- ========================================================================== --
 -- Tab_Localscript
 
 Mainfunction.BuildScriptList = function()
@@ -2237,13 +2569,10 @@ Mainfunction.getPotionConstants = function()
 end
 
 -- 從背包讀藥水數量 → 寫入 Scripttable.Potion.T*.{exp/coin/dmg/shiny/lucky}
+-- 主來源：LocalPlayer.Potions 的直接接口（<類型>Potion<階級> 的 Value）
+-- 備案：直接接口不存在時改用 getgc 的 Constants.currentPlrData.Items.Potions
 Mainfunction.updPotion = function()
-  local Constants = Mainfunction.getPotionConstants()
-  local data = Constants and Constants.currentPlrData
-  local potions = data and data.Items and data.Items.Potions
-  if type(potions) ~= "table" then return false end
-
-  -- 先把 T1~T5 的數量欄位歸零（藥水歸 0 時遊戲會直接移除該 key，必須先清再填）
+  -- 先把所有 T* 的數量欄位歸零（藥水歸 0 時來源會直接移除該項，必須先清再填）
   for tierName, tier in pairs(Scripttable.Potion) do
     if type(tier) == "table" and tierName:match("^T%d$") then
       for _, field in pairs(Scripttable.Potion.FieldMap) do
@@ -2252,13 +2581,33 @@ Mainfunction.updPotion = function()
     end
   end
 
-  -- 寫入現有數量：key 形如 "<類型>Potion<階級>"
-  for name, count in pairs(potions) do
-    local typeName, tierNum = tostring(name):match("^(%a+)Potion(%d+)$")
-    local field = typeName and Scripttable.Potion.FieldMap[typeName]
-    local tier  = tierNum and Scripttable.Potion["T" .. tierNum]
-    if field and tier and type(count) == "number" then
-      tier[field] = count
+  local potionsFolder = Gametable.LocalPlayer:FindFirstChild("Potions")
+  if potionsFolder then
+    -- 直接接口：逐一讀 <類型>Potion<階級>.Value
+    for _, obj in ipairs(potionsFolder:GetChildren()) do
+      local typeName, tierNum = tostring(obj.Name):match("^(%a+)Potion(%d+)$")
+      local field = typeName and Scripttable.Potion.FieldMap[typeName]
+      local tier  = tierNum and Scripttable.Potion["T" .. tierNum]
+      if field and tier then
+        local ok, val = pcall(function() return obj.Value end)
+        if ok and type(val) == "number" then
+          tier[field] = val
+        end
+      end
+    end
+  else
+    -- 備案：getgc Constants
+    local Constants = Mainfunction.getPotionConstants()
+    local data = Constants and Constants.currentPlrData
+    local potions = data and data.Items and data.Items.Potions
+    if type(potions) ~= "table" then return false end
+    for name, count in pairs(potions) do
+      local typeName, tierNum = tostring(name):match("^(%a+)Potion(%d+)$")
+      local field = typeName and Scripttable.Potion.FieldMap[typeName]
+      local tier  = tierNum and Scripttable.Potion["T" .. tierNum]
+      if field and tier and type(count) == "number" then
+        tier[field] = count
+      end
     end
   end
 
@@ -2274,9 +2623,9 @@ end
 -- 把 Scripttable.Potion 的數值寫進表格 cell（updPotion 負責抓資料，這裡只負責顯示）
 Mainfunction.refreshPotionCells = function()
   for _, row in ipairs(Scripttable.Potion.Rows) do
-    for t = 1, 5 do
+    for t = 1, Scripttable.Potion.MaxTier do
       local tier = Scripttable.Potion["T" .. t]
-      local cell = Scripttable.Potion.Cells[row.field][t]
+      local cell = Scripttable.Potion.Cells[row.field] and Scripttable.Potion.Cells[row.field][t]
       if tier and cell then
         local txt = tostring(tier[row.field] or 0)
         if cell.Text ~= txt then cell.Text = txt end  -- 只在變動才寫，避免每秒輪詢觸發 ReGui 重排
@@ -2458,23 +2807,25 @@ Tab_Potion:Button({
   end,
 })
 
--- 表格本體
+-- 表格本體（等級為直/列，藥水種類為橫/欄）
 Scripttable.Potion.Table = Tab_Potion:Table({ RowBackground = true, Border = true })
 
--- 標題列：左上角留白 + T1~T5
+-- 標題列：左上角 + 各藥水類型（橫）
 Scripttable.Potion.HeaderRow = Scripttable.Potion.Table:HeaderRow()
 Scripttable.Potion.HeaderRow:Column():Label({ Text = T.potion_corner })
-for t = 1, 5 do
-  Scripttable.Potion.HeaderRow:Column():Label({ Text = "T" .. t })
+for _, row in ipairs(Scripttable.Potion.Rows) do
+  Scripttable.Potion.HeaderRow:Column():Label({ Text = T[row.key] or row.field })
 end
 
--- 資料列：每種藥水一列，左欄=類型名稱，後 5 欄=各階級數量
+-- 資料列：每個等級一列（直），左欄=Tn，後面各類型數量
 Scripttable.Potion.Cells = {}  -- Cells[field][tier] = Label
 for _, row in ipairs(Scripttable.Potion.Rows) do
-  local R = Scripttable.Potion.Table:NextRow()
-  R:Column():Label({ Text = T[row.key] or row.field })
   Scripttable.Potion.Cells[row.field] = {}
-  for t = 1, 5 do
+end
+for t = 1, Scripttable.Potion.MaxTier do
+  local R = Scripttable.Potion.Table:NextRow()
+  R:Column():Label({ Text = "T" .. t })
+  for _, row in ipairs(Scripttable.Potion.Rows) do
     Scripttable.Potion.Cells[row.field][t] = R:Column():Label({ Text = "0" })
   end
 end
