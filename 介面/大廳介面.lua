@@ -16,6 +16,11 @@ game.Players.LocalPlayer.Idled:Connect(function()
 	task.wait(2)
 end)
 
+-- ===== Langtable：i18n（語言獨立表格）=====
+-- 語言相關全收進 Langtable：currentLang(語言選擇) / L(中英字串) / T(當前語言存取表)。
+-- 仍保留 local currentLang、local T 兩個薄別名，讓既有上百處 T.xxx / currentLang 引用零改動。
+local Langtable = {}
+
 -- i18n
 local currentLang = "zh"
 do
@@ -38,7 +43,7 @@ do
 	end)
 end
 
-local L = {
+Langtable.L = {
 	zh = {
 		title             = "大廳腳本",
 		tab_main          = "主頁",
@@ -415,7 +420,46 @@ local L = {
 		potion_cfg_none      = "No saved potion config",
 	},
 }
-local T = L[currentLang]
+Langtable.currentLang = currentLang
+Langtable.T = Langtable.L[currentLang]
+local T = Langtable.T  -- 存取別名（資料存於 Langtable.T）
+
+-- ===== 新增功能 i18n（社群獎勵一鍵領 / 每日登入 / 商人自動掃貨）=====
+-- 直接併入 T，避免動到上方龐大的 L 表
+do
+  local EXT = {
+    zh = {
+      auto_daily_login   = "自動領每日登入獎勵",
+      claim_social       = "一鍵領社群獎勵",
+      msg_daily_done     = "已領每日登入獎勵",
+      msg_social_done    = "社群獎勵：領取 %d 項",
+      msg_social_none    = "沒有可領的社群獎勵（可能皆已領）",
+      shop_sep_merchant  = "商人",
+      shop_auto_merchant = "自動掃貨（普通商人）",
+      shop_auto_endless  = "自動掃貨（無盡商人）",
+      shop_auto_refresh  = "掃完自動刷新（耗寶石）",
+      shop_buy_hotdeal   = "購買 Hot Deal",
+      msg_merchant_sweep = "商人：買了 %d 件",
+      msg_hotdeal_ok     = "已購買 Hot Deal",
+    },
+    en = {
+      auto_daily_login   = "Auto Claim Daily Login Reward",
+      claim_social       = "Claim All Social Rewards",
+      msg_daily_done     = "Daily login reward claimed",
+      msg_social_done    = "Social rewards: claimed %d",
+      msg_social_none    = "No social rewards to claim (maybe all claimed)",
+      shop_sep_merchant  = "Merchant",
+      shop_auto_merchant = "Auto Buy (Merchant)",
+      shop_auto_endless  = "Auto Buy (Endless Merchant)",
+      shop_auto_refresh  = "Auto Refresh When Cleared (Gems)",
+      shop_buy_hotdeal   = "Buy Hot Deal",
+      msg_merchant_sweep = "Merchant: bought %d",
+      msg_hotdeal_ok     = "Hot Deal purchased",
+    },
+  }
+  for k, v in pairs(EXT[currentLang] or EXT.zh) do T[k] = v end
+end
+
 local isMobile = game:GetService("UserInputService").TouchEnabled
 	and not game:GetService("UserInputService").KeyboardEnabled
 local radioTextSize = currentLang == "en" and 14 or 16
@@ -552,6 +596,13 @@ local Scripttable = {
 }
 local Mainfunction = {}
 
+-- ===== 新增功能狀態（社群獎勵 / 每日登入 / 商人掃貨）=====
+Scripttable.DailyLogin = false
+Scripttable.ClaimSocialRunning = false
+Scripttable.Shop.AutoMerchant = false
+Scripttable.Shop.AutoEndless = false
+Scripttable.Shop.AutoRefreshMerchant = false
+
 -- ========================================================================== --
 -- Webhook 初始化（資料模型已在 Scripttable.Webhook 定義）
 -- 每稀有度開關初始化
@@ -619,7 +670,7 @@ do
 end
 
 -- 計數工具：以 (稀有度+閃亮+塔名) 為單位累加到指定統計表
-local function _statAdd(s, rarity, shiny, tower)
+Mainfunction.statAdd = function(s, rarity, shiny, tower)
   s.total = s.total + 1
   local key = (shiny and "S|" or "N|") .. tostring(rarity) .. "|" .. tostring(tower)
   local rec = s.towers[key]
@@ -631,14 +682,14 @@ local function _statAdd(s, rarity, shiny, tower)
 end
 
 -- 每抽計數：總統計(兩模式都算)；獨立計數(只合併模式)
-local function _webhookStat(rarity, shiny, tower)
+Mainfunction.webhookStat = function(rarity, shiny, tower)
   local W = Scripttable.Webhook
-  _statAdd(W.stats, rarity, shiny, tower)
-  if W.merge then _statAdd(W.runStats, rarity, shiny, tower) end
+  Mainfunction.statAdd(W.stats, rarity, shiny, tower)
+  if W.merge then Mainfunction.statAdd(W.runStats, rarity, shiny, tower) end
 end
 
 -- 即時提醒條件：獨立通知(任何模式) 或 獨立發送模式 + 正常/閃亮
-local function _webhookShouldSend(rarity, shiny)
+Mainfunction.webhookShouldSend = function(rarity, shiny)
   local cfg = Scripttable.Webhook.Summon[rarity]
   if not cfg then return false end
   if shiny then
@@ -652,7 +703,7 @@ local function _webhookShouldSend(rarity, shiny)
 end
 
 -- 自動刪除標記：有開自動刪除且該 (稀有度,閃亮) 在刪除清單 → 統計行加「(刪除)」
-local function _webhookMarkDelete(rarity, shiny)
+Mainfunction.webhookMarkDelete = function(rarity, shiny)
   local AD = Scripttable.Summon.AutoDelete
   if not (AD and AD.enable) then return false end
   local key = shiny and ("Shiny_" .. rarity) or rarity
@@ -660,16 +711,16 @@ local function _webhookMarkDelete(rarity, shiny)
 end
 
 -- 合併模式：自動抽取停止 → 送出「獨立計數」，送出成功才清空（總統計不動）
-local function _webhookFlushRun()
+Mainfunction.webhookFlushRun = function()
   local W = Scripttable.Webhook
   if (W.runStats.total or 0) <= 0 then return end
-  if Webhook:SendSessionSummary(W.runStats, { title = T.webhook_title_run, markDelete = _webhookMarkDelete }) then
+  if Webhook:SendSessionSummary(W.runStats, { title = T.webhook_title_run, markDelete = Mainfunction.webhookMarkDelete }) then
     W.runStats = { total = 0, towers = {} }
   end
 end
 
 -- 處理 AutoMaster 完成（不進統計；維持原本即時/緩衝）
-local function _webhookHandleMaster(tower, mastery)
+Mainfunction.webhookHandleMaster = function(tower, mastery)
   local W = Scripttable.Webhook
   if not W.enabled then return end
   if not W.items.AutoMaster then return end
@@ -680,7 +731,7 @@ local function _webhookHandleMaster(tower, mastery)
   end
 end
 
-local function _webhookFlushMaster()
+Mainfunction.webhookFlushMaster = function()
   local W = Scripttable.Webhook
   if #W.buffer.master == 0 then return end
   local batch = W.buffer.master
@@ -695,8 +746,8 @@ task.spawn(function()
     local nowSummon = Scripttable.Summon.AutoRunning == true
     local nowMaster = Scripttable.AutoMaster == true
     if Scripttable.Webhook.enabled then
-      if prevSummon and not nowSummon then _webhookFlushRun() end
-      if prevMaster and not nowMaster then _webhookFlushMaster() end
+      if prevSummon and not nowSummon then Mainfunction.webhookFlushRun() end
+      if prevMaster and not nowMaster then Mainfunction.webhookFlushMaster() end
     end
     prevSummon, prevMaster = nowSummon, nowMaster
     task.wait(0.5)
@@ -719,6 +770,175 @@ Mainfunction.turntable = function()
   end
 end
 
+
+-- ===== 社群獎勵一鍵領（ClaimReward）=====
+-- Roblox 無法在 server 端驗證「按讚/追蹤/收藏/通知/邀請」→ server 多半直接給；
+-- Group 例外（server 用 GetRank 驗證，需真的在群組）。一次性獎勵：已領的（currentPlrData.Rewards[key]）跳過。
+Mainfunction.ClaimSocialRewards = function()
+  if Scripttable.ClaimSocialRunning then return end
+  Scripttable.ClaimSocialRunning = true
+  local ClaimReward = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("ClaimReward")
+  local Constants = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Constants"))
+  -- 動態取得獎勵清單（每期可能不同），失敗則用已知清單
+  local keys = {}
+  local okR, Rewards = pcall(require, ReplicatedStorage.Modules.Data.Rewards)
+  if okR and type(Rewards) == "table" then
+    for k in pairs(Rewards) do keys[#keys + 1] = k end
+  else
+    keys = { "Like", "Favourite", "Notifications", "Invite", "Follow", "Group" }
+  end
+  local claimed = (Constants.currentPlrData and Constants.currentPlrData.Rewards) or {}
+  -- 直呼 remote 會繞過遊戲 UI handler → 手動鏡像 UpdateRewards 的 UI（Verify/Invite→Verified）
+  local List
+  pcall(function() List = UI.Frames.Rewards.Container.Info.List end)
+  local function markClaimedUI(key)
+    if not List then return end
+    local entry = List:FindFirstChild(key)
+    local c = entry and entry:FindFirstChild("Container")
+    if not c then return end
+    if c:FindFirstChild("Invite")   then c.Invite.Visible = false end
+    if c:FindFirstChild("Verify")   then c.Verify.Visible = false end
+    if c:FindFirstChild("Verified") then c.Verified.Visible = true end
+  end
+  local count = 0
+  for _, key in ipairs(keys) do
+    if claimed[key] ~= true then
+      local ok, res = pcall(function() return ClaimReward:InvokeServer(key) end)
+      if ok and res then
+        count = count + 1
+        claimed[key] = true            -- claimed 即 currentPlrData.Rewards，同步資料層
+        pcall(markClaimedUI, key)       -- 同步畫面層
+        print("[Social] 領取 " .. tostring(key))
+      else
+        print("[Social] 失敗/未達成 " .. tostring(key))
+      end
+      task.wait(0.4)  -- 輕微間隔，避免一次連發
+    end
+  end
+  if count > 0 then
+    Msg:Success(string.format(T.msg_social_done, count))
+  else
+    Msg:Warning(T.msg_social_none)
+  end
+  Scripttable.ClaimSocialRunning = false
+end
+
+-- ===== 自動領每日登入獎勵（ClaimDailyReward）=====
+-- 一天一次；開啟後嘗試領取，未到/已領 server 回傳 false，等待後重試（跨午夜長掛也能領）。
+Mainfunction.DailyLogin = function()
+  local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("ClaimDailyReward")
+  -- 直呼 remote 會繞過遊戲 UI handler → 成功後手動鏡像遊戲 u19 的每日簽到 UI
+  -- （回傳 data.Day = 下次可領的天；data.Day-1 即剛領的天，標記 Claimed；跨週 Day=1 則整排重置）
+  local function markDailyUI(data)
+    if type(data) ~= "table" or not data.Day then return end
+    local Rewards
+    pcall(function() Rewards = UI.Frames.DailyRewards.Container.Info.Container.Rewards end)
+    if not Rewards then return end
+    local prev = data.Day - 1
+    if prev == 0 then
+      prev = 7
+      for _, v in ipairs(Rewards:GetChildren()) do
+        if v:IsA("Frame") then
+          v.Frame.Container.Claimed.Visible = false
+          v.Frame.Container.Locked.Visible = true
+        end
+      end
+    end
+    if prev ~= 7 then
+      local r = Rewards:FindFirstChild(tostring(prev))
+      if r then r.Frame.Container.Claimed.Visible = true; r.Frame.Container.Locked.Visible = false end
+    end
+    local cur = Rewards:FindFirstChild(tostring(data.Day))
+    if cur then cur.Frame.Container.Locked.Visible = false end
+  end
+  while Scripttable.DailyLogin do
+    local pok, success, data = pcall(function() return Remote:InvokeServer() end)
+    if pok and success then
+      pcall(markDailyUI, data)
+      Msg:Success(T.msg_daily_done)
+    end
+    -- 領到或未到都等久一點再試（每日冷卻以小時計）；可被關閉即時中止
+    for _ = 1, 60 do
+      if not Scripttable.DailyLogin then return end
+      task.wait(5)
+    end
+  end
+end
+
+-- ===== 商人自動掃貨（BuyMerchant / BuyEndlessShop / BuyHotDeal）=====
+-- 商品 = merchantContainer 底下的 Frame，.Name 即 item id；已買的 Container.Info.Bought.Visible=true。
+-- 直接呼叫 remote（非點按鈕），server 自行擋買不起的（回傳 false）→ 這裡只逐件嘗試。
+do
+  local function merchantContainer()
+    local m = UI.Frames:FindFirstChild("Merchant")
+    m = m and m:FindFirstChild("Container")
+    m = m and m:FindFirstChild("Info")
+    return m and m:FindFirstChild("Container")
+  end
+  local function endlessContainer()
+    local m = UI.Frames:FindFirstChild("EndlessMerchant")
+    m = m and m:FindFirstChild("Container")
+    m = m and m:FindFirstChild("Info")
+    return m and m:FindFirstChild("Merchant")
+  end
+
+  -- 掃一次容器內所有未購商品，回傳成功買到的件數
+  local function sweep(getContainer, remoteName)
+    local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild(remoteName)
+    local container = getContainer()
+    if not container then return 0 end
+    local bought = 0
+    for _, f in ipairs(container:GetChildren()) do
+      if f:IsA("Frame") and f.Name ~= "Template" then
+        local boughtFlag = f:FindFirstChild("Container")
+          and f.Container:FindFirstChild("Info")
+          and f.Container.Info:FindFirstChild("Bought")
+        if not (boughtFlag and boughtFlag.Visible) then
+          local ok, success = pcall(function() return Remote:InvokeServer(f.Name) end)
+          if ok and success then
+            bought = bought + 1
+            if boughtFlag then boughtFlag.Visible = true end  -- 標記已買，避免同輪重複
+            task.wait(0.35)
+          end
+        end
+      end
+    end
+    return bought
+  end
+
+  Mainfunction.AutoMerchant = function()
+    local RefreshEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Events"):WaitForChild("BuyRefreshMerchant")
+    while Scripttable.Shop.AutoMerchant do
+      local total = sweep(merchantContainer, "BuyMerchant")
+      -- 掃完且開了自動刷新 → 花寶石刷新換新貨，再掃；server 沒寶石會擋（會持續耗寶石，請謹慎）
+      if total == 0 and Scripttable.Shop.AutoRefreshMerchant then
+        RefreshEvent:FireServer()
+        task.wait(1.2)
+        total = sweep(merchantContainer, "BuyMerchant")
+      end
+      if total > 0 then Msg:Success(string.format(T.msg_merchant_sweep, total)) end
+      task.wait(Scripttable.Shop.BuyInterval or 1)
+    end
+  end
+
+  Mainfunction.AutoEndlessMerchant = function()
+    while Scripttable.Shop.AutoEndless do
+      local total = sweep(endlessContainer, "BuyEndlessShop")
+      if total > 0 then Msg:Success(string.format(T.msg_merchant_sweep, total)) end
+      task.wait(Scripttable.Shop.BuyInterval or 1)
+    end
+  end
+
+  Mainfunction.BuyHotDeal = function()
+    local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("BuyHotDeal")
+    local ok, success, msg = pcall(function() return Remote:InvokeServer() end)
+    if ok and success then
+      Msg:Success(T.msg_hotdeal_ok)
+    elseif ok and success == false and msg then
+      Msg:Warning(tostring(msg))
+    end
+  end
+end
 
 Mainfunction.playtimeRewards = function()
 	local Rewards_UI = Scripttable.playtimeRewards.GUI.Container.Info.Container.Rewards
@@ -846,25 +1066,23 @@ Scripttable.AutoMaster = false
 
 -- getgc 一次掃齊所有需要的物件（合併原本兩趟 getgc）：
 --   資料模組：towersData(getTowerData+Rarities) / itemsModule(Items+Rarities) / battlepassModule(Crates+Tiers)
---   Handler 更新函數：_updateUnitsList / _updateUnitsInfo / _updateMasteryTab（以常數比對）
+--   Handler 更新函數：Gametable.updateUnitsList / Gametable.updateUnitsInfo / Gametable.updateMasteryTab（以常數比對）
 -- 原本兩趟 getgc(true) 各自收集全部 GC 物件，且第二趟對每個 function 都跑 getconstants、又無提早結束 → 啟動卡頓。
 -- 改成「單趟 + 找齊即 break + 常數做成集合一次比對」，並 task.defer 到 UI 建完後才掃，避免擋住面板出現。
-local _TowersData, _ItemsData, _BattlepassData
-local _updateUnitsList, _updateUnitsInfo, _updateMasteryTab
 
 task.defer(function()
   local needFuncs = true
   for _, obj in ipairs(getgc(true)) do
     local t = type(obj)
     if t == "table" then
-      if not _TowersData and rawget(obj, "getTowerData") and rawget(obj, "Rarities") then
-        _TowersData = obj
+      if not Gametable.TowersData and rawget(obj, "getTowerData") and rawget(obj, "Rarities") then
+        Gametable.TowersData = obj
       end
-      if not _ItemsData and rawget(obj, "Items") and rawget(obj, "Rarities") then
-        _ItemsData = obj
+      if not Gametable.ItemsData and rawget(obj, "Items") and rawget(obj, "Rarities") then
+        Gametable.ItemsData = obj
       end
-      if not _BattlepassData and rawget(obj, "Crates") and rawget(obj, "Tiers") then
-        _BattlepassData = obj
+      if not Gametable.BattlepassData and rawget(obj, "Crates") and rawget(obj, "Tiers") then
+        Gametable.BattlepassData = obj
       end
     elseif t == "function" and needFuncs then
       local ok, consts = pcall(getconstants, obj)
@@ -872,28 +1090,28 @@ task.defer(function()
         -- 常數做成集合，一次掃描即可同時比對三個函數（取代原本每個函數各跑一輪 ipairs）
         local set = {}
         for _, c in ipairs(consts) do set[c] = true end
-        if not _updateUnitsList and set.MutationKey and set.HoverIndex then
-          _updateUnitsList = obj
+        if not Gametable.updateUnitsList and set.MutationKey and set.HoverIndex then
+          Gametable.updateUnitsList = obj
         end
-        if not _updateUnitsInfo and set.previousSelectedUnit and set.SHINY_PRICE_MULTIPLIER then
-          _updateUnitsInfo = obj
+        if not Gametable.updateUnitsInfo and set.previousSelectedUnit and set.SHINY_PRICE_MULTIPLIER then
+          Gametable.updateUnitsInfo = obj
         end
-        if not _updateMasteryTab and set.GlobalCounts and set.cycleIndex then
-          _updateMasteryTab = obj
+        if not Gametable.updateMasteryTab and set.GlobalCounts and set.cycleIndex then
+          Gametable.updateMasteryTab = obj
         end
-        needFuncs = not (_updateUnitsList and _updateUnitsInfo and _updateMasteryTab)
+        needFuncs = not (Gametable.updateUnitsList and Gametable.updateUnitsInfo and Gametable.updateMasteryTab)
       end
     end
     -- 全部找齊就停，不必掃完整個 GC 清單
-    if _TowersData and _ItemsData and _BattlepassData and not needFuncs then break end
+    if Gametable.TowersData and Gametable.ItemsData and Gametable.BattlepassData and not needFuncs then break end
   end
 end)
 
 Mainfunction.AutoMaster = function()
-	-- getgc 掃描是背景進行（task.defer），等 _TowersData 就緒再開始；正常情況早已完成
+	-- getgc 掃描是背景進行（task.defer），等 Gametable.TowersData 就緒再開始；正常情況早已完成
 	local waited = 0
-	while not _TowersData and waited < 5 do task.wait(0.1); waited = waited + 0.1 end
-	if not _TowersData then
+	while not Gametable.TowersData and waited < 5 do task.wait(0.1); waited = waited + 0.1 end
+	if not Gametable.TowersData then
 		Msg:Warning(string.format(T.msg_master_fail, "towersData"))
 		Scripttable.AutoMaster = false
 		return
@@ -910,18 +1128,18 @@ Mainfunction.AutoMaster = function()
 			for id, data in pairs(towers) do
 				if not Scripttable.AutoMaster then break end
 				local mastery = data.Mastery or 1
-				local nextData = _TowersData.Masteries[mastery + 1]
+				local nextData = Gametable.TowersData.Masteries[mastery + 1]
 				if nextData and data.Level >= nextData.Level then
 					local success = MasterRemote:InvokeServer(id)
 					if success == true then
 						data.Mastery = mastery + 1
 						data.Level = 1
 						data.XP = 0
-						if _updateMasteryTab then pcall(_updateMasteryTab) end
-						if _updateUnitsInfo then pcall(_updateUnitsInfo) end
-						if _updateUnitsList then pcall(_updateUnitsList) end
+						if Gametable.updateMasteryTab then pcall(Gametable.updateMasteryTab) end
+						if Gametable.updateUnitsInfo then pcall(Gametable.updateUnitsInfo) end
+						if Gametable.updateUnitsList then pcall(Gametable.updateUnitsList) end
 						Msg:Success(string.format(T.msg_master_ok, data.Tower, nextData.Name))
-						_webhookHandleMaster(data.Tower, nextData.Name)
+						Mainfunction.webhookHandleMaster(data.Tower, nextData.Name)
 					else
 						Msg:Warning(string.format(T.msg_master_fail, data.Tower))
 					end
@@ -933,20 +1151,20 @@ Mainfunction.AutoMaster = function()
 	end
 end
 
-local function _getRarity(towerName)
-  if not _TowersData then return "Unknown" end
-  local ok, data = pcall(_TowersData.getTowerData, towerName)
+Mainfunction.getRarity = function(towerName)
+  if not Gametable.TowersData then return "Unknown" end
+  local ok, data = pcall(Gametable.TowersData.getTowerData, towerName)
   if ok and type(data) == "table" then return data.Rarity end
   return "Unknown"
 end
 
-local function _formatTowerName(s)
+Mainfunction.formatTowerName = function(s)
   return s:gsub("(%l)(%u)", "%1 %2")
 end
 
 -- ===== 通行證箱子：抽取物品解析 / 過濾 / 通知 ===== --
 -- 後備解析：getgc 沒抓到 battlepassModule 時改讀 UI 那一格（塔→Hover.Title 是 id，可查稀有度；道具→只有顯示名）
-local function _resolveCrateRewardUI(crateType, rewardIndex)
+Mainfunction.resolveCrateRewardUI = function(crateType, rewardIndex)
   local ok, crateUI = pcall(function() return UI.Frames.Pass.Tabs.Crate.Container end)
   if not ok or not crateUI then return nil end
   local container = (crateType == "OP") and crateUI:FindFirstChild("OP") or crateUI:FindFirstChild("Basic")
@@ -954,10 +1172,10 @@ local function _resolveCrateRewardUI(crateType, rewardIndex)
   if not slot then return nil end
   local rawName = slot.Hover.Title.Text
   local info = { pool = crateType, index = rewardIndex, item = rawName }
-  local okTd, td = pcall(function() return _TowersData and _TowersData.getTowerData(rawName) end)
+  local okTd, td = pcall(function() return Gametable.TowersData and Gametable.TowersData.getTowerData(rawName) end)
   if okTd and type(td) == "table" and td.Rarity then
     info.isTower = true
-    info.name    = _formatTowerName(rawName)
+    info.name    = Mainfunction.formatTowerName(rawName)
     info.rarity  = td.Rarity
   else
     info.isTower = false
@@ -972,22 +1190,22 @@ end
 
 -- 主解析：直接讀 battlepassModule.Crates[池][index] = {Type, Item, Amount, Chance}
 -- 回傳 { pool, isTower, name, rarity, amount, item }；找不到資料 → 退回 UI 解析
-local function _resolveCrateReward(crateType, rewardIndex)
-  local crates = _BattlepassData and _BattlepassData.Crates
+Mainfunction.resolveCrateReward = function(crateType, rewardIndex)
+  local crates = Gametable.BattlepassData and Gametable.BattlepassData.Crates
   local reward = crates and crates[crateType] and crates[crateType][rewardIndex]
   if type(reward) ~= "table" then
-    return _resolveCrateRewardUI(crateType, rewardIndex)
+    return Mainfunction.resolveCrateRewardUI(crateType, rewardIndex)
   end
   local info = { pool = crateType, index = rewardIndex, isTower = reward.Type == "Tower", item = reward.Item, amount = reward.Amount }
   if info.isTower then
-    info.name   = _formatTowerName(reward.Item)
-    info.rarity = _getRarity(reward.Item)
+    info.name   = Mainfunction.formatTowerName(reward.Item)
+    info.rarity = Mainfunction.getRarity(reward.Item)
     info.amount = nil                       -- 塔無數量
   elseif reward.Item == "Potion5" then
     info.name   = T.crate_potion5           -- 遊戲內為循環顯示的 T5 藥水
     info.rarity = "Mythic"
   else
-    local idata = _ItemsData and _ItemsData.Items and _ItemsData.Items[reward.Item]
+    local idata = Gametable.ItemsData and Gametable.ItemsData.Items and Gametable.ItemsData.Items[reward.Item]
     info.name   = (idata and idata.Name) or tostring(reward.Item)
     info.rarity = idata and idata.Rarity or nil
   end
@@ -995,7 +1213,7 @@ local function _resolveCrateReward(crateType, rewardIndex)
 end
 
 -- 過濾：查 Scripttable.Gamepass.reward[池][index].notify（清單於啟動時依實際獎池動態建立）
-local function _crateNotable(info)
+Mainfunction.crateNotable = function(info)
   local key  = (info.pool == "OP") and "Op" or "Basic"
   local pool = Scripttable.Gamepass.reward[key]
   local entry = pool and info.index and pool[info.index]
@@ -1004,11 +1222,10 @@ local function _crateNotable(info)
 end
 
 -- 過濾 UI（在 reward 表建立後才填入；每期獎勵不同所以動態產生）
-local _crateFilterHeader, _crateFilterLoading
-local function _buildCrateFilterUI()
-  local header = _crateFilterHeader
+Mainfunction.buildCrateFilterUI = function()
+  local header = Scripttable.crateFilterHeader
   if not header then return end
-  if _crateFilterLoading then _crateFilterLoading.Visible = false end
+  if Scripttable.crateFilterLoading then Scripttable.crateFilterLoading.Visible = false end
   for _, key in ipairs({ "Basic", "Op" }) do
     local list = Scripttable.Gamepass.reward[key]
     if list and #list > 0 then
@@ -1038,11 +1255,9 @@ local function _buildCrateFilterUI()
 end
 
 -- ===== 通行證設定存檔（lobby_Gamepass_Config.json）：顯示開關 / 獨家停止 / 逐格通知 ===== --
-local _gpShowItemCtrl, _gpStopCtrl   -- UI 控件參考（載入時刷新用），於建 UI 時指派
-local _drawBoxToggle                 -- 抽箱主開關（抽到獨家自動停止時用來關掉）
 
 -- 把已存的逐格通知（以物品 id 為 key）套回 reward 表
-local function _applyGamepassNotify()
+Mainfunction.applyGamepassNotify = function()
   local saved = Scripttable.Gamepass._savedNotify
   if type(saved) ~= "table" then return end
   for _, key in ipairs({ "Basic", "Op" }) do
@@ -1057,10 +1272,10 @@ local function _applyGamepassNotify()
 end
 
 -- 依目前 Scripttable 值刷新 UI 控件（控件還沒建立則略過）
-local function _refreshGamepassUI()
+Mainfunction.refreshGamepassUI = function()
   local G = Scripttable.Gamepass
-  if _gpShowItemCtrl then pcall(function() _gpShowItemCtrl:SetValue(G.Crate.ShowItem) end) end
-  if _gpStopCtrl     then pcall(function() _gpStopCtrl:SetValue(G.Crate.StopOnExclusive) end) end
+  if Scripttable.gpShowItemCtrl then pcall(function() Scripttable.gpShowItemCtrl:SetValue(G.Crate.ShowItem) end) end
+  if Scripttable.gpStopCtrl     then pcall(function() Scripttable.gpStopCtrl:SetValue(G.Crate.StopOnExclusive) end) end
   for _, key in ipairs({ "Basic", "Op" }) do
     for _, entry in ipairs(G.reward[key]) do
       if entry._ctrl then pcall(function() entry._ctrl:SetValue(entry.notify == true) end) end
@@ -1118,8 +1333,8 @@ Mainfunction.LoadGamepassConfig = function(silent)
   if type(data.ShowItem)        == "boolean" then G.Crate.ShowItem = data.ShowItem end
   if type(data.StopOnExclusive) == "boolean" then G.Crate.StopOnExclusive = data.StopOnExclusive end
   if type(data.notify)          == "table"   then G._savedNotify = data.notify end
-  _applyGamepassNotify()   -- reward 已建立才有效（啟動時為空，留待建表後再套）
-  _refreshGamepassUI()     -- 控件已建立才有效
+  Mainfunction.applyGamepassNotify()   -- reward 已建立才有效（啟動時為空，留待建表後再套）
+  Mainfunction.refreshGamepassUI()     -- 控件已建立才有效
   if not silent then Msg:Success(T.gamepass_cfg_loaded) end
   return true
 end
@@ -1128,7 +1343,7 @@ end
 Mainfunction.LoadGamepassConfig(true)
 
 -- 螢幕通知（名稱／數量／池子，塔再帶稀有度）
-local function _crateNotify(info)
+Mainfunction.crateNotify = function(info)
   local poolLabel = (info.pool == "OP") and T.crate_pool_op or T.crate_pool_basic
   local label
   if info.isTower then
@@ -1142,7 +1357,7 @@ local function _crateNotify(info)
 end
 
 -- Webhook：受總開關 + items.CrateOP 控制；用模組的公開 Webhook:Send 自組 embed（含獎池欄）
-local function _webhookCrateDraw(info)
+Mainfunction.webhookCrateDraw = function(info)
   local Wt = Scripttable.Webhook
   if not (Wt.enabled and Wt.items.CrateOP) then return end
   if not Webhook:IsValid() then return end
@@ -1167,25 +1382,25 @@ local function _webhookCrateDraw(info)
 end
 
 -- Hook
-local _SpinRemote    = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("SpinBattlepassCrate")
-local _EnchantRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Enchant")
-local _SummonRemote  = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon")
-local _lastSpinData = nil
-local _PityConfig = {
+Gametable.SpinRemote    = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("SpinBattlepassCrate")
+Gametable.EnchantRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Enchant")
+Gametable.SummonRemote  = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon")
+Scripttable.lastSpinData = nil
+Scripttable.PityConfig = {
 	{ key = "Legendary", label = currentLang == "zh" and "傳奇" or "Legendary", max = 50    },
 	{ key = "Mythic",    label = currentLang == "zh" and "神話" or "Mythic",    max = 400   },
 	{ key = "Secret",    label = currentLang == "zh" and "秘密" or "Secret",    max = 10000 },
 }
 
-local _summonResultQueue = {}
+Scripttable.summonResultQueue = {}
 game:GetService("RunService").Heartbeat:Connect(function()
-	if #_summonResultQueue == 0 then return end
-	local items = _summonResultQueue
-	_summonResultQueue = {}
+	if #Scripttable.summonResultQueue == 0 then return end
+	local items = Scripttable.summonResultQueue
+	Scripttable.summonResultQueue = {}
 	for _, data in ipairs(items) do
 		local pity, result = data.pity, data.result
 		if type(pity) == "table" then
-			for _, cfg in ipairs(_PityConfig) do
+			for _, cfg in ipairs(Scripttable.PityConfig) do
 				if cfg.bar and pity[cfg.key] ~= nil then
 					local v   = tonumber(pity[cfg.key]) or 0
 					local pct = v / cfg.max * 100
@@ -1201,14 +1416,14 @@ game:GetService("RunService").Heartbeat:Connect(function()
 			for _, entry in ipairs(result) do
 				local tower    = entry.tower or "?"
 				local shiny    = entry.shiny == true
-				local rarity   = _getRarity(tower)
+				local rarity   = Mainfunction.getRarity(tower)
 
 				-- 螢幕通知
 				if n.enable then
 					local rarityHit = n.HIGH_TIER[rarity] == true
 					local shinyHit  = shiny and n.NOTIFY_SHINY
 					if rarityHit or shinyHit then
-						local displayName = _formatTowerName(tower)
+						local displayName = Mainfunction.formatTowerName(tower)
 						local label
 						if shiny then
 							label = string.format(T.summon_notify_shiny, rarity, displayName)
@@ -1221,10 +1436,10 @@ game:GetService("RunService").Heartbeat:Connect(function()
 				end
 
 				-- Webhook 統計（含塔名）
-				_webhookStat(rarity, shiny, tower)
+				Mainfunction.webhookStat(rarity, shiny, tower)
 
 				-- Webhook 即時提醒：獨立通知(任何模式) 或 獨立發送+正常/閃亮；同批同塔合併 ×N
-				if W.enabled and _webhookShouldSend(rarity, shiny) then
+				if W.enabled and Mainfunction.webhookShouldSend(rarity, shiny) then
 					local key = (shiny and "S|" or "N|") .. rarity .. "|" .. tower
 					local rec = wbImmediate[key]
 					if not rec then
@@ -1244,8 +1459,7 @@ game:GetService("RunService").Heartbeat:Connect(function()
 	end
 end)
 
-local _oldNamecall
-_oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+Scripttable.oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 	if getnamecallmethod() == "PromptSetFavorite" then
 		print("[Hook] PromptSetFavorite 被攔截，blockFavouritePrompt =", Scripttable.blockFavouritePrompt)
 		if Scripttable.blockFavouritePrompt then
@@ -1253,15 +1467,15 @@ _oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 		end
 	end
 	if getnamecallmethod() == "InvokeServer" then
-		if self == _SpinRemote then
-			local ok, data = _oldNamecall(self, ...)
+		if self == Gametable.SpinRemote then
+			local ok, data = Scripttable.oldNamecall(self, ...)
 			if ok and type(data) == "table" then
-				_lastSpinData = data
+				Scripttable.lastSpinData = data
 			end
 			return ok, data
 		end
-		if self == _EnchantRemote then
-			local result = _oldNamecall(self, ...)
+		if self == Gametable.EnchantRemote then
+			local result = Scripttable.oldNamecall(self, ...)
 			if Scripttable.Skip_Enchanting then
 				task.spawn(function()
 					local SkipBtn = UI.Frames.Enchanting.Tabs.Container.Info.Container.Info.Buttons.Skip
@@ -1275,13 +1489,13 @@ t += 0.1 until SkipBtn.Visible or t >= 10
 			end
 			return result
 		end
-		if self == _SummonRemote then
-			local result, pity = _oldNamecall(self, ...)
-			_summonResultQueue[#_summonResultQueue + 1] = { result = result, pity = pity }
+		if self == Gametable.SummonRemote then
+			local result, pity = Scripttable.oldNamecall(self, ...)
+			Scripttable.summonResultQueue[#Scripttable.summonResultQueue + 1] = { result = result, pity = pity }
 			return result, pity
 		end
 	end
-	return _oldNamecall(self, ...)
+	return Scripttable.oldNamecall(self, ...)
 end)
 
 -- 抽取通行證箱子（直接呼叫 Remote，不經 UI 按鈕）
@@ -1290,7 +1504,7 @@ end)
 --   舊版用 firesignal 觸發開抽、又在動畫途中再 firesignal 同一個 signal 來「跳過」，
 --   等於在第一個 handler 還掛在 yield（InvokeServer / 動畫）時重入同一條連線，
 --   執行器嘗試 resume 一條非 suspended 的 thread → "cannot resume non-suspended coroutine"（PassUi:487/529）。
---   直接呼叫 Remote 就沒有動畫、沒有重入，也最快；namecall hook 仍會抓到 _lastSpinData，OP 容器在初始化時已填好。
+--   直接呼叫 Remote 就沒有動畫、沒有重入，也最快；namecall hook 仍會抓到 Scripttable.lastSpinData，OP 容器在初始化時已填好。
 Mainfunction.Gamepass_DrawBox = function()
 	local Constants = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Constants"))
 	local Functions = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions")
@@ -1333,13 +1547,13 @@ Mainfunction.Gamepass_DrawBox = function()
 
 		-- 解析抽到的獎勵 → 通知 / Webhook（共用過濾）；resolve 包 pcall 防資料異常中斷連抽
 		if spinData.crateType == "OP" then opCount += 1 end
-		local rok, info = pcall(_resolveCrateReward, spinData.crateType, spinData.rewardIndex)
+		local rok, info = pcall(Mainfunction.resolveCrateReward, spinData.crateType, spinData.rewardIndex)
 		if not rok then info = nil end
 		if info then
-			if _crateNotable(info) then
+			if Mainfunction.crateNotable(info) then
 				pcall(function()
-					if Scripttable.Gamepass.Crate.ShowItem then _crateNotify(info) end
-					_webhookCrateDraw(info)   -- 內部再檢查 Webhook 總開關 / CrateOP
+					if Scripttable.Gamepass.Crate.ShowItem then Mainfunction.crateNotify(info) end
+					Mainfunction.webhookCrateDraw(info)   -- 內部再檢查 Webhook 總開關 / CrateOP
 				end)
 			end
 			-- 抽到獨家(Exclusive)自動停止（不受通知過濾影響）
@@ -1347,7 +1561,7 @@ Mainfunction.Gamepass_DrawBox = function()
 				local m = string.format(T.msg_stop_exclusive, tostring(info.name))
 				print("[DrawBox] " .. m)
 				Msg:Success(m)
-				if _drawBoxToggle then pcall(function() _drawBoxToggle:SetValue(false) end) end
+				if Scripttable.drawBoxToggle then pcall(function() Scripttable.drawBoxToggle:SetValue(false) end) end
 				Scripttable.Gamepass.Draw_Box = false
 				break
 			end
@@ -1491,6 +1705,25 @@ Tab_main:Radiobox({
 	end,
 })
 
+-- 自動領每日登入獎勵（7 日簽到）
+Tab_main:Radiobox({
+	Value = false,
+	Label = T.auto_daily_login,
+	TextSize = radioTextSize,
+	Disabled = false,
+	Callback = function(self, Value)
+		Scripttable.DailyLogin = Value
+		if Value then task.spawn(Mainfunction.DailyLogin) end
+	end,
+})
+
+-- 一鍵領社群獎勵（按讚/追蹤/收藏/通知/邀請/群組）
+Tab_main:Button({
+	Text = T.claim_social,
+	DoubleClick = false,
+	Callback = function() task.spawn(Mainfunction.ClaimSocialRewards) end,
+})
+
 Tab_main:Separator({
 	Text = T.sep_battlepass
 })
@@ -1523,7 +1756,7 @@ Tab_main:Radiobox({
 
 local DrawBox = Tab_main:Row()
 
-_drawBoxToggle = DrawBox:Radiobox({
+Scripttable.drawBoxToggle = DrawBox:Radiobox({
 	Value = false,
 	Label = T.draw_box,
 	TextSize = radioTextSize,
@@ -1550,7 +1783,7 @@ DrawBox:SliderFloat({
 
 -- 顯示抽取物品（主開關）+ 抽到獨家後停止
 local CrateOpts = Tab_main:Row()
-_gpShowItemCtrl = CrateOpts:Radiobox({
+Scripttable.gpShowItemCtrl = CrateOpts:Radiobox({
   Value = Scripttable.Gamepass.Crate.ShowItem,
   Label = T.show_item,
   TextSize = radioTextSize,
@@ -1558,7 +1791,7 @@ _gpShowItemCtrl = CrateOpts:Radiobox({
     Scripttable.Gamepass.Crate.ShowItem = Value
   end,
 })
-_gpStopCtrl = CrateOpts:Radiobox({
+Scripttable.gpStopCtrl = CrateOpts:Radiobox({
   Value = Scripttable.Gamepass.Crate.StopOnExclusive,
   Label = T.crate_stop_exclusive,
   TextSize = radioTextSize,
@@ -1568,12 +1801,12 @@ _gpStopCtrl = CrateOpts:Radiobox({
 })
 
 -- 抽取通知過濾（逐格開關，Msg 與 Webhook 共用）
--- 每期獎勵不同 → 內容於啟動時依實際獎池動態填入（見「初始化」段的 _buildCrateFilterUI）
-_crateFilterHeader = Tab_main:CollapsingHeader({ Title = T.crate_filter_header, Collapsed = true })
-_crateFilterLoading = _crateFilterHeader:Label({ Text = T.crate_filter_loading })
+-- 每期獎勵不同 → 內容於啟動時依實際獎池動態填入（見「初始化」段的 Mainfunction.buildCrateFilterUI）
+Scripttable.crateFilterHeader = Tab_main:CollapsingHeader({ Title = T.crate_filter_header, Collapsed = true })
+Scripttable.crateFilterLoading = Scripttable.crateFilterHeader:Label({ Text = T.crate_filter_loading })
 
 -- 儲存 / 載入通行證設定（lobby_Gamepass_Config.json）
-local GamepassCfgRow = _crateFilterHeader:Row({ Expanded = true })
+local GamepassCfgRow = Scripttable.crateFilterHeader:Row({ Expanded = true })
 GamepassCfgRow:SmallButton({
   Text     = T.gamepass_save,
   Callback = function() Mainfunction.SaveGamepassConfig() end,
@@ -1827,7 +2060,7 @@ do
   end)
 end
 
-local function _colourNativeToggle(rarity, kind, isOn)
+Mainfunction.colourNativeToggle = function(rarity, kind, isOn)
   local AD = Scripttable.Summon.AutoDelete
   if not (AD.Frame and AD.Colours) then return end
   pcall(function()
@@ -1845,23 +2078,23 @@ local function _colourNativeToggle(rarity, kind, isOn)
 end
 
 -- 翻轉伺服器某 (rarity, kind) 的自動刪除，並依回傳值替原生按鈕上色（綠=開 / 紅=關）
-local function _applyAutoDelete(rarity, kind)
+Mainfunction.applyAutoDelete = function(rarity, kind)
   local AD = Scripttable.Summon.AutoDelete
   local ok, ret = pcall(function()
     return AD.Remote:InvokeServer(rarity, kind)
   end)
   if ok then
     print(string.format("[AutoDelete] %s %s -> %s", rarity, kind, tostring(ret)))
-    _colourNativeToggle(rarity, kind, ret == true)
+    Mainfunction.colourNativeToggle(rarity, kind, ret == true)
   end
 end
 
-local function _syncAutoDelete()
+Mainfunction.syncAutoDelete = function()
   local AD = Scripttable.Summon.AutoDelete
   task.spawn(function()
     for _, r in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
-      if AD.HIGH_TIER[r] then _applyAutoDelete(r, "Normal") end
-      if AD.HIGH_TIER["Shiny_" .. r] then _applyAutoDelete(r, "Shiny") end
+      if AD.HIGH_TIER[r] then Mainfunction.applyAutoDelete(r, "Normal") end
+      if AD.HIGH_TIER["Shiny_" .. r] then Mainfunction.applyAutoDelete(r, "Shiny") end
     end
   end)
 end
@@ -1945,7 +2178,7 @@ Row_SummonOptions:Radiobox({
   Callback = function(self, Value)
     Scripttable.Summon.AutoDelete.enable = Value
     if not Scripttable.Summon.AutoDelete.UIReady then return end
-    _syncAutoDelete()
+    Mainfunction.syncAutoDelete()
     if Value then
       Msg:Success(T.autodelete_applied)
     else
@@ -1970,7 +2203,7 @@ for _, rarity in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
     Callback = function(self, Value)
       Scripttable.Summon.AutoDelete.HIGH_TIER[rarity] = Value
       if Scripttable.Summon.AutoDelete.enable then
-        task.spawn(_applyAutoDelete, rarity, "Normal")
+        task.spawn(Mainfunction.applyAutoDelete, rarity, "Normal")
       end
     end,
   })
@@ -1983,7 +2216,7 @@ for _, rarity in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
     Callback = function(self, Value)
       Scripttable.Summon.AutoDelete.HIGH_TIER[shinyKey] = Value
       if Scripttable.Summon.AutoDelete.enable then
-        task.spawn(_applyAutoDelete, rarity, "Shiny")
+        task.spawn(Mainfunction.applyAutoDelete, rarity, "Shiny")
       end
     end,
   })
@@ -2000,7 +2233,7 @@ AutoDeleteBtns:SmallButton({
 })
 
 Tab_Summon:Separator({ Text = T.pity_separator })
-for _, cfg in ipairs(_PityConfig) do
+for _, cfg in ipairs(Scripttable.PityConfig) do
   cfg.bar = Tab_Summon:ProgressBar({
     Label    = cfg.label,
     Value    = 0,
@@ -2013,10 +2246,6 @@ end
 -- ========================================================================== --
 -- Tab_Shop（商店）
 
-local _shopCoinCrateToggle   -- 自動購買開關（金幣不足時用來關掉 UI）
-local _shopOpenCrateToggle   -- 自動開箱開關（箱子不足時用來關掉 UI）
-local _crateCombo            -- 箱子下拉（更新預覽用）
-local _shopConsole           -- 開箱結果 Console（顯示開到的物品）
 
 -- 自動購買金幣箱子：BuyCoinCrate:InvokeServer(選項序號)，序號由下拉選單選 (1=x1 / 2=x3 / 3=x10)
 -- 金幣不足自動停：買之前先用 Shop.CoinCrate[檔].Coins 與當前金幣比對
@@ -2030,7 +2259,7 @@ Mainfunction.AutoBuyCoinCrate = function()
     local coins = (coinObj and coinObj.Value) or 0
     if coins < cost then
       Scripttable.Shop.AutoBuyCoinCrate = false
-      if _shopCoinCrateToggle then pcall(function() _shopCoinCrateToggle:SetValue(false) end) end
+      if Scripttable.shopCoinCrateToggle then pcall(function() Scripttable.shopCoinCrateToggle:SetValue(false) end) end
       Msg:Warning(T.shop_no_coins)
       break
     end
@@ -2040,7 +2269,7 @@ Mainfunction.AutoBuyCoinCrate = function()
 end
 
 -- 即時金幣顯示
-local _shopCommaNumber = function(n)
+Mainfunction.shopCommaNumber = function(n)
   local s = tostring(math.floor(tonumber(n) or 0))
   local k
   repeat s, k = s:gsub("^(-?%d+)(%d%d%d)", "%1,%2") until k == 0
@@ -2050,7 +2279,7 @@ local ShopCoinsLabel = Tab_Shop:Label({ Text = string.format(T.shop_coins, "0") 
 task.spawn(function()
   while true do
     local coinObj = Gametable.LocalPlayer:FindFirstChild("Coins")
-    local txt = string.format(T.shop_coins, _shopCommaNumber(coinObj and coinObj.Value or 0))
+    local txt = string.format(T.shop_coins, Mainfunction.shopCommaNumber(coinObj and coinObj.Value or 0))
     if ShopCoinsLabel.Text ~= txt then ShopCoinsLabel.Text = txt end  -- 只在變動才寫
     task.wait(0.3)
   end
@@ -2059,7 +2288,7 @@ end)
 Tab_Shop:Separator({ Text = T.shop_coincrate })
 
 -- 自動購買開關
-_shopCoinCrateToggle = Tab_Shop:Radiobox({
+Scripttable.shopCoinCrateToggle = Tab_Shop:Radiobox({
   Value = false,
   Label = T.shop_auto_coincrate,
   TextSize = radioTextSize,
@@ -2073,8 +2302,8 @@ _shopCoinCrateToggle = Tab_Shop:Radiobox({
 
 -- 購買速度（前）+ 檔位下拉 x1/x3/x10（後），同一排
 -- 下拉每項 = { index = 給 BuyCoinCrate 的序號, key = 成本鍵 }
-local _shopItems   = { "x1", "x3", "x10" }              -- combo 第 N 項 → 標籤
-local _shopOptions = {                                  -- 標籤 → { index, key }
+Scripttable.shopItems   = { "x1", "x3", "x10" }              -- combo 第 N 項 → 標籤
+Scripttable.shopOptions = {                                  -- 標籤 → { index, key }
   x1  = { index = 1, key = "x1"  },
   x3  = { index = 2, key = "x3"  },
   x10 = { index = 3, key = "x10" },
@@ -2093,11 +2322,11 @@ ShopRow:SliderFloat({
 ShopRow:Combo({
   Label = " ",
   Selected = 1,
-  Items = _shopItems,
+  Items = Scripttable.shopItems,
   Callback = function(self, label)
     -- label 可能是字串("x3")或 combo 索引(數字)
-    local lbl = (type(label) == "number") and _shopItems[label] or tostring(label)
-    local opt = _shopOptions[lbl]
+    local lbl = (type(label) == "number") and Scripttable.shopItems[label] or tostring(label)
+    local opt = Scripttable.shopOptions[lbl]
     if opt then
       Scripttable.Shop.BuyIndex = opt.index
       Scripttable.Shop.BuyTier  = opt.key
@@ -2107,7 +2336,7 @@ ShopRow:Combo({
 
 -- ---- 自動開啟箱子 ----
 -- 從 LocalPlayer.Crates 讀箱子清單與數量（穩定排序）
-local function _readCrates()
+Mainfunction.readCrates = function()
   local out = {}
   local folder = Gametable.LocalPlayer:FindFirstChild("Crates")
   if folder then
@@ -2121,45 +2350,44 @@ local function _readCrates()
 end
 
 -- 依最大數量決定位數（2 或 3 位…超過再加），數量補零對齊
-local function _crateDigits(crates)
+Mainfunction.crateDigits = function(crates)
   local maxc = 0
   for _, c in ipairs(crates) do if c.count > maxc then maxc = c.count end end
   return math.max(2, #tostring(maxc))
 end
-local function _crateLabel(name, count, width)
+Mainfunction.crateLabel = function(name, count, width)
   return string.format("%s  %0" .. width .. "d", name, count)
 end
 -- GetItems：每次打開下拉即時回傳「箱子 數量」標籤
-local function _crateItems()
-  local crates = _readCrates()
-  local width = _crateDigits(crates)
+Mainfunction.crateItems = function()
+  local crates = Mainfunction.readCrates()
+  local width = Mainfunction.crateDigits(crates)
   local items = {}
   for _, c in ipairs(crates) do
-    items[#items + 1] = _crateLabel(c.name, c.count, width)
+    items[#items + 1] = Mainfunction.crateLabel(c.name, c.count, width)
   end
   return items
 end
 
 -- 解析開到的獎勵：UseItem 回傳的 data.reward 是 cratesModule.Crates[箱子].Rewards[索引]
 -- 的「索引」（無 Rewards 池的箱子 → 索引本身就是塔名），再用 itemsModule/towersData 轉成名稱/稀有度
-local _rarityHex = {
+Scripttable.rarityHex = {
   Common = "#B0B0B0", Rare = "#3B9DFF", Epic = "#B14CFF", Legendary = "#FFB347",
   Mythic = "#FF4C7D", Secret = "#FF0033", Exclusive = "#FFD700",
 }
 -- 箱子定義模組（直接 require：ReplicatedStorage.Modules.Data.Crates；快取）
-local _cratesModule
-local function _getCratesModule()
-  if _cratesModule == nil then
+Mainfunction.getCratesModule = function()
+  if Scripttable.cratesModule == nil then
     local ok, mod = pcall(function()
       return require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Crates"))
     end)
-    _cratesModule = (ok and type(mod) == "table") and mod or false
+    Scripttable.cratesModule = (ok and type(mod) == "table") and mod or false
   end
-  return _cratesModule or nil
+  return Scripttable.cratesModule or nil
 end
 
-local function _resolveOpenedReward(crateName, rewardVal)
-  local mod     = _getCratesModule()
+Mainfunction.resolveOpenedReward = function(crateName, rewardVal)
+  local mod     = Mainfunction.getCratesModule()
   local crates  = mod and mod.Crates
   local crate   = (type(crates) == "table") and crates[crateName] or nil
   local rewards = (type(crate) == "table") and crate.Rewards or nil
@@ -2168,10 +2396,10 @@ local function _resolveOpenedReward(crateName, rewardVal)
   local info = { amount = r.Amount }
   if r.Type == "Tower" then
     info.isTower = true
-    info.name = _formatTowerName(tostring(r.Item))
-    info.rarity = _getRarity(r.Item)
+    info.name = Mainfunction.formatTowerName(tostring(r.Item))
+    info.rarity = Mainfunction.getRarity(r.Item)
   else
-    local idata = _ItemsData and _ItemsData.Items and _ItemsData.Items[r.Item]
+    local idata = Gametable.ItemsData and Gametable.ItemsData.Items and Gametable.ItemsData.Items[r.Item]
     info.name = (idata and idata.Name) or tostring(r.Item)
     info.rarity = idata and idata.Rarity or nil
   end
@@ -2179,18 +2407,18 @@ local function _resolveOpenedReward(crateName, rewardVal)
 end
 
 -- 寫一行到開箱 Console（RichText 依稀有度上色）
-local function _shopConsoleWrite(info)
-  if not _shopConsole then return end
-  local amount = info.amount and (" ×" .. _shopCommaNumber(info.amount)) or ""
+Mainfunction.shopConsoleWrite = function(info)
+  if not Scripttable.shopConsole then return end
+  local amount = info.amount and (" ×" .. Mainfunction.shopCommaNumber(info.amount)) or ""
   local line
   if info.rarity then
     local rname = T["rarity_" .. info.rarity] or info.rarity
-    local hex = _rarityHex[info.rarity] or "#FFFFFF"
+    local hex = Scripttable.rarityHex[info.rarity] or "#FFFFFF"
     line = string.format('<font color="%s">[%s] %s%s</font>', hex, rname, info.name, amount)
   else
     line = tostring(info.name) .. amount
   end
-  pcall(function() _shopConsole:AppendText(line) end)
+  pcall(function() Scripttable.shopConsole:AppendText(line) end)
 end
 
 -- 自動開箱：UseItem:InvokeServer(箱子名, 次數) → 回傳 (success, data)
@@ -2205,7 +2433,7 @@ Mainfunction.AutoOpenCrate = function()
     local count = (obj and obj.Value) or 0
     if not name or count < amt then
       Scripttable.Shop.AutoOpenCrate = false
-      if _shopOpenCrateToggle then pcall(function() _shopOpenCrateToggle:SetValue(false) end) end
+      if Scripttable.shopOpenCrateToggle then pcall(function() Scripttable.shopOpenCrateToggle:SetValue(false) end) end
       Msg:Warning(T.shop_no_crates)
       break
     end
@@ -2214,7 +2442,7 @@ Mainfunction.AutoOpenCrate = function()
       -- 多抽 → data.reward 是索引陣列；單抽 → 單一索引
       local list = (type(data.reward) == "table") and data.reward or { data.reward }
       for _, rv in ipairs(list) do
-        _shopConsoleWrite(_resolveOpenedReward(name, rv))
+        Mainfunction.shopConsoleWrite(Mainfunction.resolveOpenedReward(name, rv))
       end
     end
     task.wait(Scripttable.Shop.BuyInterval)  -- 共用「購買速度」
@@ -2224,13 +2452,13 @@ end
 Tab_Shop:Separator({ Text = T.shop_opencrate_sep })
 
 -- Row：選箱子（前）+ 選開的次數 ×1/×3（後）
-local _openItems = { "×1", "×3" }
+Scripttable.openItems = { "×1", "×3" }
 local CrateRow = Tab_Shop:Row()
-_crateCombo = CrateRow:Combo({
+Scripttable.crateCombo = CrateRow:Combo({
   Label = " ",
   Selected = 1,
-  Items = _crateItems(),     -- 初始
-  GetItems = _crateItems,    -- 打開時即時刷新
+  Items = Mainfunction.crateItems(),     -- 初始
+  GetItems = Mainfunction.crateItems,    -- 打開時即時刷新
   Callback = function(self, label)
     local name = tostring(label):match("^(%S+)")   -- 取「箱子名 數量」前段
     local folder = Gametable.LocalPlayer:FindFirstChild("Crates")
@@ -2242,15 +2470,15 @@ _crateCombo = CrateRow:Combo({
 CrateRow:Combo({
   Label = " ",
   Selected = 1,
-  Items = _openItems,
+  Items = Scripttable.openItems,
   Callback = function(self, label)
-    local lbl = (type(label) == "number") and _openItems[label] or tostring(label)
+    local lbl = (type(label) == "number") and Scripttable.openItems[label] or tostring(label)
     Scripttable.Shop.OpenAmount = tonumber(tostring(lbl):match("%d+")) or 1
   end,
 })
 
 -- 開關
-_shopOpenCrateToggle = Tab_Shop:Radiobox({
+Scripttable.shopOpenCrateToggle = Tab_Shop:Radiobox({
   Value = false,
   Label = T.shop_auto_opencrate,
   TextSize = radioTextSize,
@@ -2266,10 +2494,10 @@ do
   ResultRow:Label({ Text = T.shop_open_result })
   ResultRow:SmallButton({
     Text     = T.shop_clear,
-    Callback = function() if _shopConsole then pcall(function() _shopConsole:Clear() end) end end,
+    Callback = function() if Scripttable.shopConsole then pcall(function() Scripttable.shopConsole:Clear() end) end end,
   })
 end
-_shopConsole = Tab_Shop:Console({
+Scripttable.shopConsole = Tab_Shop:Console({
   Value       = "",
   ReadOnly    = true,
   RichText    = true,
@@ -2282,7 +2510,7 @@ _shopConsole = Tab_Shop:Console({
 -- 預設/修正選中箱子 + 即時更新下拉預覽（箱子 當前數量）
 task.spawn(function()
   while true do
-    local crates = _readCrates()
+    local crates = Mainfunction.readCrates()
     if #crates > 0 then
       -- 目前選的若不是有效箱子（含啟動時 nil）→ 預設第一個
       local valid = false
@@ -2291,15 +2519,59 @@ task.spawn(function()
       end
       if not valid then Scripttable.Shop.OpenCrateName = crates[1].name end
       -- 更新預覽文字
-      local width = _crateDigits(crates)
+      local width = Mainfunction.crateDigits(crates)
       local name = Scripttable.Shop.OpenCrateName
       local count = 0
       for _, c in ipairs(crates) do if c.name == name then count = c.count break end end
-      pcall(function() _crateCombo:SetValueText(_crateLabel(name, count, width)) end)
+      pcall(function() Scripttable.crateCombo:SetValueText(Mainfunction.crateLabel(name, count, width)) end)
     end
     task.wait(0.3)
   end
 end)
+
+-- ========================================================================== --
+-- Tab_Shop（商人自動掃貨）
+
+Tab_Shop:Separator({ Text = T.shop_sep_merchant })
+
+-- 普通商人自動掃貨
+Tab_Shop:Radiobox({
+  Value = false,
+  Label = T.shop_auto_merchant,
+  TextSize = radioTextSize,
+  Callback = function(self, Value)
+    Scripttable.Shop.AutoMerchant = Value
+    if Value then task.spawn(Mainfunction.AutoMerchant) end
+  end,
+})
+
+-- 掃完自動刷新（會持續花寶石，預設關）
+Tab_Shop:Radiobox({
+  Value = false,
+  Label = T.shop_auto_refresh,
+  TextSize = radioTextSize,
+  Callback = function(self, Value)
+    Scripttable.Shop.AutoRefreshMerchant = Value
+  end,
+})
+
+-- 無盡商人自動掃貨
+Tab_Shop:Radiobox({
+  Value = false,
+  Label = T.shop_auto_endless,
+  TextSize = radioTextSize,
+  Callback = function(self, Value)
+    Scripttable.Shop.AutoEndless = Value
+    if Value then task.spawn(Mainfunction.AutoEndlessMerchant) end
+  end,
+})
+
+-- 購買 Hot Deal（單次）
+Tab_Shop:Button({
+  Text = T.shop_buy_hotdeal,
+  DoubleClick = false,
+  Callback = function() task.spawn(Mainfunction.BuyHotDeal) end,
+})
 
 -- ========================================================================== --
 -- Tab_Localscript
@@ -2967,11 +3239,11 @@ end
 Mainfunction.LoadWebhookConfig(true)
 
 -- URL 狀態 + 輸入
-local function _webhookStatusText()
+Mainfunction.webhookStatusText = function()
   return (W.url ~= "" and (T.webhook_url_label .. Mainfunction.maskWebhook(W.url))) or T.webhook_url_unset
 end
 
-local Webhook_Lable = Tab_Webhook:Label({ Text = _webhookStatusText() })
+local Webhook_Lable = Tab_Webhook:Label({ Text = Mainfunction.webhookStatusText() })
 
 local Webhook_InputText = Tab_Webhook:InputText({
   Value       = W.url,
@@ -2980,7 +3252,7 @@ local Webhook_InputText = Tab_Webhook:InputText({
   Callback    = function(self, text)
     W.url = text
     Webhook:SetURL(text)
-    Webhook_Lable.Text = _webhookStatusText()
+    Webhook_Lable.Text = Mainfunction.webhookStatusText()
   end,
 })
 
@@ -2996,29 +3268,29 @@ local Webhook_Toggle = Row_Webhook_Mode:Radiobox({
   Callback = function(self, Value) W.enabled = Value end,
 })
 
-local _modeGuard = false
+Scripttable.modeGuard = false
 local Radio_Indep, Radio_Merge
 
-local function _setMode(merge)
-  if _modeGuard then return end
-  _modeGuard = true
+Mainfunction.setMode = function(merge)
+  if Scripttable.modeGuard then return end
+  Scripttable.modeGuard = true
   W.merge = merge
   W.runStats = { total = 0, towers = {} }  -- 換模式重置獨立計數
   if Radio_Indep then Radio_Indep:SetValue(not merge) end
   if Radio_Merge then Radio_Merge:SetValue(merge) end
-  _modeGuard = false
+  Scripttable.modeGuard = false
 end
 Radio_Indep = Row_Webhook_Mode:Radiobox({
   Value    = not W.merge,
   Label    = T.webhook_mode_indep,
   TextSize = radioTextSize,
-  Callback = function(self, v) if not _modeGuard then _setMode(not v) end end,
+  Callback = function(self, v) if not Scripttable.modeGuard then Mainfunction.setMode(not v) end end,
 })
 Radio_Merge = Row_Webhook_Mode:Radiobox({
   Value    = W.merge,
   Label    = T.webhook_mode_merge,
   TextSize = radioTextSize,
-  Callback = function(self, v) if not _modeGuard then _setMode(v) end end,
+  Callback = function(self, v) if not Scripttable.modeGuard then Mainfunction.setMode(v) end end,
 })
 
 -- 第二排：測試發送 / 傳送統計 / 清除統計（皆只看 URL，不受總開關限制）
@@ -3042,7 +3314,7 @@ Row_Webhook_Act:Button({
       Msg:Warning(T.webhook_msg_no_url)
       return
     end
-    if Webhook:SendSessionSummary(W.stats, { title = T.webhook_title_total, markDelete = _webhookMarkDelete }) then
+    if Webhook:SendSessionSummary(W.stats, { title = T.webhook_title_total, markDelete = Mainfunction.webhookMarkDelete }) then
       Msg:Success(T.webhook_msg_sent)
     end
   end,
@@ -3084,7 +3356,7 @@ HRow:Column():Label({ Text = T.webhook_col_ishiny })
 
 -- 空 label 的 radiobox 只有那顆小圓點可點，欄位其餘空白區不吃點擊（觸控幾乎按不到）。
 -- 把 checkbox 物件撐滿整格 → 整個格子都能點（Object.Activated 涵蓋整塊）。
-local function _fillCell(box)
+Mainfunction.fillCell = function(box)
   if box then
     box.AutomaticSize = Enum.AutomaticSize.Y
     box.Size = UDim2.new(1, 0, 0, 0)
@@ -3103,13 +3375,13 @@ for _, rarity in ipairs(W.UIRarities) do
   Row:Column():Label({ Text = (T["rarity_" .. rarity] or rarity) })
 
   -- 正常
-  ctrls.Normal = _fillCell(Row:Column():Radiobox({
+  ctrls.Normal = Mainfunction.fillCell(Row:Column():Radiobox({
     Value = cfg.Normal, Label = "",
     Callback = function(self, v) cfg.Normal = v end,
   }))
 
   -- 獨立_正常
-  ctrls.IndependentNormal = _fillCell(Row:Column():Radiobox({
+  ctrls.IndependentNormal = Mainfunction.fillCell(Row:Column():Radiobox({
     Value = cfg.IndependentNormal, Label = "",
     Callback = function(self, v) cfg.IndependentNormal = v end,
   }))
@@ -3117,7 +3389,7 @@ for _, rarity in ipairs(W.UIRarities) do
   -- 閃亮
   local shinyCol = Row:Column()
   if hasShiny then
-    ctrls.Shiny = _fillCell(shinyCol:Radiobox({
+    ctrls.Shiny = Mainfunction.fillCell(shinyCol:Radiobox({
       Value = cfg.Shiny, Label = "",
       Callback = function(self, v) cfg.Shiny = v end,
     }))
@@ -3128,7 +3400,7 @@ for _, rarity in ipairs(W.UIRarities) do
   -- 獨立_閃亮
   local indShinyCol = Row:Column()
   if hasShiny then
-    ctrls.IndependentShiny = _fillCell(indShinyCol:Radiobox({
+    ctrls.IndependentShiny = Mainfunction.fillCell(indShinyCol:Radiobox({
       Value = cfg.IndependentShiny, Label = "",
       Callback = function(self, v) cfg.IndependentShiny = v end,
     }))
@@ -3173,14 +3445,14 @@ for _, r in ipairs(W.UIPing) do
 end
 
 -- 載入後把所有 UI 控件刷新成目前 W 值（免重載腳本）
-local function _webhookRefreshUI()
+Mainfunction.webhookRefreshUI = function()
   Webhook_InputText:SetValue(W.url)
   Webhook_Toggle:SetValue(W.enabled)
-  -- 模式：用 guard 直接設值，避免觸發 _setMode 重置獨立計數
-  _modeGuard = true
+  -- 模式：用 guard 直接設值，避免觸發 Mainfunction.setMode 重置獨立計數
+  Scripttable.modeGuard = true
   Radio_Indep:SetValue(not W.merge)
   Radio_Merge:SetValue(W.merge)
-  _modeGuard = false
+  Scripttable.modeGuard = false
   Item_CrateOP:SetValue(W.items.CrateOP)
   Item_AutoMaster:SetValue(W.items.AutoMaster)
   for rarity, c in pairs(SummonCtrls) do
@@ -3205,7 +3477,7 @@ Webhook_SaveRow:SmallButton({
 Webhook_SaveRow:SmallButton({
   Text = T.webhook_load,
   Callback = function()
-    if Mainfunction.LoadWebhookConfig() then _webhookRefreshUI() end
+    if Mainfunction.LoadWebhookConfig() then Mainfunction.webhookRefreshUI() end
   end,
 })
 
@@ -3259,8 +3531,8 @@ task.spawn(function()
       i, tostring(key), tostring(cur), tostring(thresholds and (thresholds[i] or thresholds[key]) or "?")))
   end
 
-  -- 以 _PityConfig.key 對應（不靠陣列順序）；current/max 都同時試 index 與名稱
-  for _, cfg in ipairs(_PityConfig) do
+  -- 以 Scripttable.PityConfig.key 對應（不靠陣列順序）；current/max 都同時試 index 與名稱
+  for _, cfg in ipairs(Scripttable.PityConfig) do
     if cfg.bar then
       local matched = false
       for i, key in ipairs(keys) do
@@ -3292,10 +3564,10 @@ end)
 task.spawn(function()
   -- 等資料模組就緒（getgc 背景掃描）；逾時也照下去，解析器有 UI 後備
   for _ = 1, 40 do
-    if _BattlepassData and _TowersData then break end
+    if Gametable.BattlepassData and Gametable.TowersData then break end
     task.wait(0.5)
   end
-  if not _resolveCrateReward("Basic", 1) then
+  if not Mainfunction.resolveCrateReward("Basic", 1) then
     warn("[Crate Filter] 解析不到獎池內容，過濾清單未建立")
     return
   end
@@ -3305,7 +3577,7 @@ task.spawn(function()
   for gamePool, key in pairs(map) do
     local list = {}
     for i = 1, 12 do
-      local info = _resolveCrateReward(gamePool, i)
+      local info = Mainfunction.resolveCrateReward(gamePool, i)
       if not info then break end
       info.notify = (gamePool == "OP")   -- 預設：OP 池全開、普通池全關
       list[i] = info
@@ -3317,8 +3589,8 @@ task.spawn(function()
     Scripttable.Gamepass.reward[key] = list
   end
 
-  _applyGamepassNotify()   -- 套用存檔的逐格通知（若有）
-  _buildCrateFilterUI()
+  Mainfunction.applyGamepassNotify()   -- 套用存檔的逐格通知（若有）
+  Mainfunction.buildCrateFilterUI()
   print(string.format("[Crate Filter] 已建立：Basic %d 格、Op %d 格",
     #Scripttable.Gamepass.reward.Basic, #Scripttable.Gamepass.reward.Op))
 end)
