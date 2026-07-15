@@ -11,6 +11,14 @@ if not getgenv().MOVEAPI then
 end
 local Move = getgenv().MOVEAPI
 
+task.spawn(function()
+	local ok, err = pcall(loadstring(game:HttpGet("https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/%E4%BB%8B%E9%9D%A2/QueueMonitor.lua")))
+
+	if not ok then
+		warn("[QueueMonitor]", err)
+	end
+end)
+
 -- i18n
 local HttpService = game:GetService("HttpService")
 local currentLang = "zh"
