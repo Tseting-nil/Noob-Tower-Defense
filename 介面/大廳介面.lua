@@ -93,6 +93,8 @@ local L = {
 		autodelete_enable    = "自動刪除",
 		autodelete_applied   = "已套用自動刪除設定",
 		autodelete_off       = "已關閉自動刪除",
+    autodelete_monkey_applied   = "已套用猴子自動刪除設定",
+    autodelete_monkey_off       = "已關閉猴子自動刪除",
 		autodelete_save      = "儲存",
 		autodelete_load      = "載入",
 		autodelete_saved     = "已儲存自動刪除設定",
@@ -112,6 +114,11 @@ local L = {
 		auto_x10          = "自動x10",
     auto_x20          = "自動x20",
 		single_pull       = "單抽出奇蹟!!",
+		msg_nobanana      = "黃金香蕉不足",
+		sep_monkey        = "猴子抽取 (活動)",
+		monkey_banana_fmt = "黃金香蕉: %d",
+		monkey_autodelete_enable = "猴子自動刪除",
+		monkey_autodelete_header = "猴子自動刪除設定",
 		cooldown_ready    = "狀態: 可抽取",
 		cooldown_waiting  = "狀態: 冷卻中",
     Skip_Summon       = "跳過抽取動畫",
@@ -281,7 +288,9 @@ local L = {
 		autodelete_enable    = "Auto Delete",
 		autodelete_applied   = "Auto-delete settings applied",
 		autodelete_off       = "Auto-delete disabled",
-		autodelete_save      = "Save",
+    autodelete_monkey_applied   = "Monkey auto-delete settings applied",
+    autodelete_monkey_off       = "Monkey auto-delete disabled",
+    autodelete_save      = "Save",
 		autodelete_load      = "Load",
 		autodelete_saved     = "Auto-delete config saved",
 		autodelete_loaded    = "Auto-delete config loaded",
@@ -299,6 +308,12 @@ local L = {
 		block_popup       = "Block Annoying Popups",
 		auto_x10          = "Auto x10",
 		single_pull       = "Single Pull Miracle!!",
+		auto_x20          = "Auto x20",
+		msg_nobanana      = "Not enough bananas",
+		sep_monkey        = "Monkey Summon (Event)",
+		monkey_banana_fmt = "Golden Bananas: %d",
+		monkey_autodelete_enable = "Monkey Auto Delete",
+		monkey_autodelete_header = "Monkey Auto Delete Settings",
 		cooldown_ready    = "State: Ready",
 		cooldown_waiting  = "State: On Cooldown",
     Skip_Summon       = "Skip Summon Animation",
@@ -496,7 +511,7 @@ local Scripttable = {
     Cooldown = 4,
 		Retro_enable = false,
 		Standard_enable = false,
-		Summer_enable = false,
+		Monkey_enable = false,
     Gui = UI.Frames.Summon,
     notify = {
       enable = true,
@@ -512,6 +527,20 @@ local Scripttable = {
       NOTIFY_SHINY = true,
     },
     AutoDelete = {
+      enable = false,
+      HIGH_TIER = {
+        Common    = false,
+        Rare      = false,
+        Epic      = false,
+        Legendary = false,
+        Shiny_Common    = false,
+        Shiny_Rare      = false,
+        Shiny_Epic      = false,
+        Shiny_Legendary = false,
+      },
+      UIReady = false,
+    },
+    MonkeyAutoDelete = {
       enable = false,
       HIGH_TIER = {
         Common    = false,
@@ -546,6 +575,7 @@ local Scripttable = {
     -- 自動刪除設定檔路徑
     ConfigDir  = [[Tsetingnil_script\NTD\Config]],
     ConfigPath = [[Tsetingnil_script\NTD\Config\Summon_AutoDelete.json]],
+    MonkeyConfigPath = [[Tsetingnil_script\NTD\Config\Summon_MonkeyAutoDelete.json]],
     WebhookConfigPath = [[Tsetingnil_script\NTD\Config\lobby_Webhook_Config.json]],
     PotionConfigPath  = [[Tsetingnil_script\NTD\Config\lobby_Potion_Config.json]],
     GamepassConfigPath = [[Tsetingnil_script\NTD\Config\lobby_Gamepass_Config.json]],
@@ -1574,6 +1604,46 @@ Mainfunction.Gamepass_DrawBox = function()
 	end
 end
 
+local function formatNumberWithCommas(n)
+  local s = tostring(math.floor(tonumber(n) or 0))
+  local k
+  repeat s, k = s:gsub("^(-?%d+)(%d%d%d)", "%1,%2") until k == 0
+  return s
+end
+
+local function readGoldenBananas()
+  local lp = Gametable.LocalPlayer or game:GetService("Players").LocalPlayer
+  local obj = lp and lp:FindFirstChild("GoldenBananas")
+  if obj then
+    return tonumber(obj.Value) or 0
+  end
+  local ok, val = pcall(function()
+    local Constants = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Constants"))
+    return tonumber(Constants.currentPlrData.Currencies.GoldenBananas)
+  end)
+  return ok and val or 0
+end
+
+Mainfunction.MonkeySummon = function(x)
+  if Scripttable.Summon.ISCooldown then
+    Msg:Warning(string.format(T.msg_cooldown, Scripttable.Summon.Cooldown))
+    return
+  end
+  local Bananas = readGoldenBananas()
+  local cost = x == 1 and 20 or x == 10 and 100 or 180
+  if Bananas < cost then
+    Msg:Warning(T.msg_nobanana)
+    return "Not enough bananas"
+  end
+  
+  local ok, err = pcall(function()
+    return ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(x, "Monkey")
+  end)
+  if not ok then
+    warn("[MonkeySummon] 呼叫遠端失敗:", err)
+  end
+end
+
 -- 抽取召喚 ("Standard","Retro")
 Mainfunction.Summon = function(x, BannerType)
   if Scripttable.Summon.ISCooldown then
@@ -1875,6 +1945,22 @@ Tab_Summon:Separator({
 	Text = T.sep_standard
 })
 
+local CoinsLabel = Tab_Summon:Label({
+	Text = "金幣: ---",
+	TextSize = 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
+
+task.spawn(function()
+	while true do
+		local coinObj = Gametable.LocalPlayer:FindFirstChild("Coins")
+		local txt = string.format(T.shop_coins, formatNumberWithCommas(coinObj and coinObj.Value or 0))
+		if CoinsLabel.Text ~= txt then CoinsLabel.Text = txt end
+		task.wait(1)
+	end
+end)
+
 local Row_Retro = Tab_Summon:Row()
 
 Row_Retro:Button({
@@ -1961,28 +2047,39 @@ Row_Retro:Radiobox({
 })
 
 Tab_Summon:Separator({
-	Text = "夏日抽取"
+	Text = T.sep_monkey
 })
 
-local Row_Summer = Tab_Summon:Row()
+local BananasLabel = Tab_Summon:Label({
+	Text = "黃金香蕉: ---",
+	TextSize = 16,
+	NoTheme = true,
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+})
 
-Row_Summer:Button({
+task.spawn(function()
+	while true do
+		local val = readGoldenBananas()
+		BananasLabel.Text = string.format(T.monkey_banana_fmt, val)
+		task.wait(1)
+	end
+end)
+
+local Row_Monkey = Tab_Summon:Row()
+
+Row_Monkey:Button({
 	Text = T.single_pull,
 	Callback = function()
 		if Scripttable.Summon.ISCooldown then
 			Msg:Warning(string.format(T.msg_cooldown, Scripttable.Summon.Cooldown))
 			return
 		end
-		local Coin = Gametable.LocalPlayer.Coins.Value
-		if Coin < 100 then
-			Msg:Warning(T.msg_nocoin)
+		local Bananas = readGoldenBananas()
+		if Bananas < 20 then
+			Msg:Warning(T.msg_nobanana)
 			return
 		end
-		local args = {
-			1,
-			"Summer"
-		}
-		game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(unpack(args))
+		Mainfunction.MonkeySummon(1)
 		Scripttable.Summon.ISCooldown = true
 		task.wait(Scripttable.Summon.Cooldown)
 		Scripttable.Summon.ISCooldown = false
@@ -1990,7 +2087,7 @@ Row_Summer:Button({
 	DoubleClick = false,
 })
 
-Row_Summer:Radiobox({
+Row_Monkey:Radiobox({
 	Value = false,
 	Label = T.auto_x10,
 	TextSize = radioTextSize,
@@ -2003,23 +2100,14 @@ Row_Summer:Radiobox({
 				return
 			end
 			Scripttable.Summon.AutoRunning = true
-			Scripttable.Summon.Summer_enable = true
+			Scripttable.Summon.Monkey_enable = true
 			task.spawn(function()
-				while Scripttable.Summon.Summer_enable do
-					local Coin = Gametable.LocalPlayer.Coins.Value
-					local cost = math.floor(100 * 10 * 0.9)
-					if Coin < cost then
-						Msg:Warning(T.msg_nocoin)
+				while Scripttable.Summon.Monkey_enable do
+					local start = Mainfunction.MonkeySummon(10)
+					if start == "Not enough bananas" then
 						self:SetValue(false)
 						return
 					end
-					local args = {
-						10,
-						"Summer"
-					}
-					pcall(function()
-						return game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(unpack(args))
-					end)
 					Scripttable.Summon.ISCooldown = true
 					task.wait(Scripttable.Summon.Cooldown)
 					Scripttable.Summon.ISCooldown = false
@@ -2028,12 +2116,12 @@ Row_Summer:Radiobox({
 			end)
 		else
 			Scripttable.Summon.AutoRunning = false
-			Scripttable.Summon.Summer_enable = false
+			Scripttable.Summon.Monkey_enable = false
 		end
 	end,
 })
 
-Row_Summer:Radiobox({
+Row_Monkey:Radiobox({
 	Value = false,
 	Label = T.auto_x20,
 	TextSize = radioTextSize,
@@ -2046,23 +2134,14 @@ Row_Summer:Radiobox({
 				return
 			end
 			Scripttable.Summon.AutoRunning = true
-			Scripttable.Summon.Summer_enable = true
+			Scripttable.Summon.Monkey_enable = true
 			task.spawn(function()
-				while Scripttable.Summon.Summer_enable do
-					local Coin = Gametable.LocalPlayer.Coins.Value
-					local cost = math.floor(75 * 20)
-					if Coin < cost then
-						Msg:Warning(T.msg_nocoin)
+				while Scripttable.Summon.Monkey_enable do
+					local start = Mainfunction.MonkeySummon(20)
+					if start == "Not enough bananas" then
 						self:SetValue(false)
 						return
 					end
-					local args = {
-						20,
-						"Summer"
-					}
-					pcall(function()
-						return game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(unpack(args))
-					end)
 					Scripttable.Summon.ISCooldown = true
 					task.wait(Scripttable.Summon.Cooldown)
 					Scripttable.Summon.ISCooldown = false
@@ -2071,7 +2150,7 @@ Row_Summer:Radiobox({
 			end)
 		else
 			Scripttable.Summon.AutoRunning = false
-			Scripttable.Summon.Summer_enable = false
+			Scripttable.Summon.Monkey_enable = false
 		end
 	end,
 })
@@ -2174,13 +2253,28 @@ do
   pcall(function()
     AD.Colours = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Colours"))
   end)
+
+  -- 猴子自動刪除初始化
+  local MAD = Scripttable.Summon.MonkeyAutoDelete
+  MAD.Remote = AD.Remote
+  MAD.Colours = AD.Colours
+  MAD.Frame = UI.Frames:FindFirstChild("MonkeySummon") and UI.Frames.MonkeySummon:FindFirstChild("AutoDelete")
+  task.spawn(function()
+    if not MAD.Frame then
+      MAD.Frame = UI.Frames:WaitForChild("MonkeySummon", 15) and UI.Frames.MonkeySummon:WaitForChild("AutoDelete", 5)
+    end
+    if MAD.Frame and Scripttable.Summon.MonkeyAutoDelete.enable then
+      _syncMonkeyAutoDelete()
+    end
+  end)
 end
 
 local function _colourNativeToggle(rarity, kind, isOn)
   local AD = Scripttable.Summon.AutoDelete
-  if not (AD.Frame and AD.Colours) then return end
+  local Frame = AD.Frame or (Scripttable.Summon.Gui and Scripttable.Summon.Gui:FindFirstChild("AutoDelete"))
+  if not (Frame and AD.Colours) then return end
   pcall(function()
-    local entry = AD.Frame.Info.List:FindFirstChild(rarity)
+    local entry = Frame.Info.List:FindFirstChild(rarity)
     if not entry then return end
     local toggle = entry.Container.Toggle:FindFirstChild(kind)
     if not toggle then return end
@@ -2203,6 +2297,45 @@ local function _applyAutoDelete(rarity, kind)
     print(string.format("[AutoDelete] %s %s -> %s", rarity, kind, tostring(ret)))
     _colourNativeToggle(rarity, kind, ret == true)
   end
+end
+
+local function _colourMonkeyNativeToggle(rarity, kind, isOn)
+  local AD = Scripttable.Summon.MonkeyAutoDelete
+  local Frame = AD.Frame or (UI.Frames:FindFirstChild("MonkeySummon") and UI.Frames.MonkeySummon:FindFirstChild("AutoDelete"))
+  if not (Frame and AD.Colours) then return end
+  pcall(function()
+    local entry = Frame.Info.List:FindFirstChild(rarity)
+    if not entry then return end
+    local toggle = entry.Container.Toggle:FindFirstChild(kind)
+    if not toggle then return end
+    local colour = isOn and AD.Colours.Green or AD.Colours.Red
+    for _, d in ipairs(toggle:GetDescendants()) do
+      if d:IsA("UIGradient") and d.Name == "ButtonGrad" then
+        d.Color = colour
+      end
+    end
+  end)
+end
+
+local function _applyMonkeyAutoDelete(rarity, kind)
+  local AD = Scripttable.Summon.MonkeyAutoDelete
+  local ok, ret = pcall(function()
+    return AD.Remote:InvokeServer(rarity, kind, "Monkey")
+  end)
+  if ok then
+    print(string.format("[AutoDelete_EVENT_monkey] %s %s -> %s", rarity, kind, tostring(ret)))
+    _colourMonkeyNativeToggle(rarity, kind, ret == true)
+  end
+end
+
+local function _syncMonkeyAutoDelete()
+  local AD = Scripttable.Summon.MonkeyAutoDelete
+  task.spawn(function()
+    for _, r in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
+      if AD.HIGH_TIER[r] then _applyMonkeyAutoDelete(r, "Normal") end
+      if AD.HIGH_TIER["Shiny_" .. r] then _applyMonkeyAutoDelete(r, "Shiny") end
+    end
+  end)
 end
 
 local function _syncAutoDelete()
@@ -2264,6 +2397,55 @@ Mainfunction.LoadConfig = function(silent)
   return true
 end
 
+Mainfunction.SaveMonkeyConfig = function()
+  for _, dir in ipairs({ "Tsetingnil_script", "Tsetingnil_script\\NTD", Scripttable.Localscript.ConfigDir }) do
+    if isfolder and makefolder and not isfolder(dir) then
+      pcall(makefolder, dir)
+    end
+  end
+  local ok, encoded = pcall(function()
+    return HttpService:JSONEncode(Scripttable.Summon.MonkeyAutoDelete.HIGH_TIER)
+  end)
+  if not ok then
+    Msg:Warning(string.format(T.autodelete_save_fail, tostring(encoded)))
+    return false
+  end
+  local ok2, err = pcall(writefile, Scripttable.Localscript.MonkeyConfigPath, encoded)
+  if ok2 then
+    Msg:Success("猴子自動刪除配置已儲存")
+    return true
+  end
+  Msg:Warning(string.format(T.autodelete_save_fail, tostring(err)))
+  return false
+end
+
+Mainfunction.LoadMonkeyConfig = function(silent)
+  if not (isfile and readfile and isfile(Scripttable.Localscript.MonkeyConfigPath)) then
+    if not silent then Msg:Warning(T.autodelete_no_config) end
+    return false
+  end
+  local ok, raw = pcall(readfile, Scripttable.Localscript.MonkeyConfigPath)
+  if not ok or not raw or raw == "" then
+    if not silent then Msg:Warning(T.autodelete_no_config) end
+    return false
+  end
+  local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+  if not ok2 or type(data) ~= "table" then
+    if not silent then Msg:Warning(T.autodelete_no_config) end
+    return false
+  end
+  local HT = Scripttable.Summon.MonkeyAutoDelete.HIGH_TIER
+  for key in pairs(HT) do
+    if type(data[key]) == "boolean" then
+      HT[key] = data[key]
+    end
+  end
+  if not silent then Msg:Success("猴子自動刪除配置已載入") end
+  return true
+end
+
+Mainfunction.LoadMonkeyConfig(true)
+
 Mainfunction.LoadConfig(true)
 
 local Row_SummonOptions = Tab_Summon:Row()
@@ -2299,6 +2481,24 @@ Row_SummonOptions:Radiobox({
       Msg:Success(T.autodelete_applied)
     else
       Msg:Warning(T.autodelete_off)
+    end
+  end,
+})
+
+local Row_SummonOptions2 = Tab_Summon:Row()
+
+Row_SummonOptions2:Radiobox({
+  Value    = Scripttable.Summon.MonkeyAutoDelete.enable,
+  Label    = T.monkey_autodelete_enable,
+  TextSize = radioTextSize,
+  Callback = function(self, Value)
+    Scripttable.Summon.MonkeyAutoDelete.enable = Value
+    if not Scripttable.Summon.MonkeyAutoDelete.UIReady then return end
+    _syncMonkeyAutoDelete()
+    if Value then
+      Msg:Success(T.autodelete_monkey_applied)
+    else
+      Msg:Warning(T.autodelete_monkey_off)
     end
   end,
 })
@@ -2346,6 +2546,51 @@ AutoDeleteBtns:SmallButton({
 AutoDeleteBtns:SmallButton({
   Text     = T.autodelete_load,
   Callback = function() Mainfunction.LoadConfig() end,
+})
+
+local MonkeyAutoDeleteHeader = Tab_Summon:CollapsingHeader({
+  Title     = T.monkey_autodelete_header,
+  Collapsed = true,
+})
+
+local MonkeyAutoDeleteTable = MonkeyAutoDeleteHeader:Table({ MaxColumns = 2 })
+for _, rarity in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
+  local Row = MonkeyAutoDeleteTable:NextRow()
+  -- 左欄：一般
+  Row:NextColumn():Radiobox({
+    Value    = Scripttable.Summon.MonkeyAutoDelete.HIGH_TIER[rarity],
+    Label    = T["rarity_" .. rarity] or rarity,
+    TextSize = radioTextSize,
+    Callback = function(self, Value)
+      Scripttable.Summon.MonkeyAutoDelete.HIGH_TIER[rarity] = Value
+      if Scripttable.Summon.MonkeyAutoDelete.enable then
+        task.spawn(_applyMonkeyAutoDelete, rarity, "Normal")
+      end
+    end,
+  })
+  -- 右欄：閃亮
+  local shinyKey = "Shiny_" .. rarity
+  Row:NextColumn():Radiobox({
+    Value    = Scripttable.Summon.MonkeyAutoDelete.HIGH_TIER[shinyKey],
+    Label    = T.rarity_shiny .. " " .. (T["rarity_" .. rarity] or rarity),
+    TextSize = radioTextSize,
+    Callback = function(self, Value)
+      Scripttable.Summon.MonkeyAutoDelete.HIGH_TIER[shinyKey] = Value
+      if Scripttable.Summon.MonkeyAutoDelete.enable then
+        task.spawn(_applyMonkeyAutoDelete, rarity, "Shiny")
+      end
+    end,
+  })
+end
+
+local MonkeyAutoDeleteBtns = MonkeyAutoDeleteHeader:Row({ Expanded = true })
+MonkeyAutoDeleteBtns:SmallButton({
+  Text     = T.autodelete_save,
+  Callback = function() Mainfunction.SaveMonkeyConfig() end,
+})
+MonkeyAutoDeleteBtns:SmallButton({
+  Text     = T.autodelete_load,
+  Callback = function() Mainfunction.LoadMonkeyConfig() end,
 })
 
 Tab_Summon:Separator({ Text = T.pity_separator })
@@ -3607,6 +3852,7 @@ Webhook_SaveRow:SmallButton({
 -- 初始化
 
 Scripttable.Summon.AutoDelete.UIReady = true
+Scripttable.Summon.MonkeyAutoDelete.UIReady = true
 Scripttable.Webhook.UIReady = true
 
 -- 初始化保底進度（從 currentPlrData.Summons 讀現有進度，不必先抽取）
