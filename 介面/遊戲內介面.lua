@@ -12,10 +12,26 @@ end
 local Move = getgenv().MOVEAPI
 
 task.spawn(function()
-	local ok, err = pcall(loadstring(game:HttpGet("https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/%E4%BB%8B%E9%9D%A2/QueueMonitor.lua")))
+	local API_VAR_PATH = "Tsetingnil_script/NTD/API_VAR.json"
+	local shouldLoadQueue = true
+	pcall(function()
+		if isfile and isfile(API_VAR_PATH) and readfile then
+			local raw = readfile(API_VAR_PATH)
+			if raw and raw ~= "" then
+				local ok, data = pcall(game:GetService("HttpService").JSONDecode, game:GetService("HttpService"), raw)
+				if ok and type(data) == "table" and data.showqueuemonitor == false then
+					shouldLoadQueue = false
+				end
+			end
+		end
+	end)
 
-	if not ok then
-		warn("[QueueMonitor]", err)
+	if shouldLoadQueue then
+		local ok, err = pcall(loadstring(game:HttpGet("https://raw.githubusercontent.com/Tseting-nil/Noob-Tower-Defense/refs/heads/main/%E4%BB%8B%E9%9D%A2/QueueMonitor.lua")))
+
+		if not ok then
+			warn("[QueueMonitor]", err)
+		end
 	end
 end)
 
@@ -115,7 +131,8 @@ local i18n = {
 		onText = "開", offText = "關",
 		instantUpdateConfirmTitle = "確認關閉自動更新？",
 		instantUpdateConfirmDesc  = "關閉後主腳本只會在『大廳』更新，掛機中途不會被打斷。",
-		tab_stats              = "統計",
+		showqueuemonitor          = "顯示佇列監控",
+    tab_stats              = "統計",
 		stats_section          = "累計統計",
 		stats_wins             = "勝：",
 		stats_losses           = "輸：",
@@ -199,6 +216,7 @@ local i18n = {
 		onText = "ON", offText = "OFF",
 		instantUpdateConfirmTitle = "Disable auto update?",
 		instantUpdateConfirmDesc  = "When off, the main script only updates in the LOBBY — farming won't be interrupted.",
+		showqueuemonitor          = "Show Queue Monitor",
 		tab_stats              = "Stats",
 		stats_section          = "Cumulative Stats",
 		stats_wins             = "Wins: ",
@@ -310,6 +328,15 @@ local function writeInstantUpdate(value)
 	end)
 end
 
+local function writeShowQueueMonitor(value)
+	pcall(function()
+		if not writefile then return end
+		local data = readApiVarTable()
+		data.showqueuemonitor = value and true or false
+		writefile(SETTINGS_API_VAR, HttpService:JSONEncode(data))
+	end)
+end
+
 -- 由 loader 寫入 API_VAR 的 expires_at(秒) 計算剩餘時間文字
 local function fmtKeyRemaining()
 	local exp = tonumber(readApiVarTable().expires_at)
@@ -373,6 +400,18 @@ InstantUpdate_Box = Tab_settings:Radiobox({
 	end,
 })
 _instantBoxReady = true
+
+local _queueBoxReady = false
+Tab_settings:Radiobox({
+	Value = readApiVarTable().showqueuemonitor ~= false, -- 預設 true
+	Label = L.showqueuemonitor,
+	TextSize = fontSize or 16,
+	Callback = function(_, Value)
+		if not _queueBoxReady then return end
+		writeShowQueueMonitor(Value)
+	end,
+})
+_queueBoxReady = true
 
 Tab_main:Separator({
 	Text = L.sectionStatus
