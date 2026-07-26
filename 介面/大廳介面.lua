@@ -506,7 +506,7 @@ local Scripttable = {
     reward = { Basic = {}, Op = {} },
   },
 	Summon = {
-    Skip = false,
+    Skip = true,
     ISCooldown = false,
     Cooldown = 4,
 		Retro_enable = false,
@@ -1645,6 +1645,11 @@ Mainfunction.MonkeySummon = function(x)
 end
 
 -- 抽取召喚 ("Standard","Retro")
+-- 為何不用 firesignal(Summon_btn.Activated)：
+-- 遊戲的 attemptSummon 連線會 Summon:InvokeServer() 並播放含 task.wait 及 Tween.Completed:Wait() 的動畫，都會 yield。
+-- 用 firesignal 觸發開抽在動畫途中再次執行，會在第一個 handler 還掛在 yield 時重入，
+-- 執行器嘗試 resume 一條非 suspended 的 thread → "cannot resume non-suspended coroutine" (Summon:568)。
+-- 直接呼叫 Remote 沒有動畫、沒有重入衝突，速度也最快；__namecall hook 仍會抓到 (result, pity) 進行通知與 Webhook 統計。
 Mainfunction.Summon = function(x, BannerType)
   if Scripttable.Summon.ISCooldown then
     Msg:Warning(string.format(T.msg_cooldown, Scripttable.Summon.Cooldown))
@@ -1658,15 +1663,12 @@ Mainfunction.Summon = function(x, BannerType)
     return "Not enough coins"
   end
   local banner_name = BannerType or "Standard"
-  if Scripttable.Summon.Skip then
-    ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(x, banner_name)
-    return
+  local ok, err = pcall(function()
+    return ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("Summon"):InvokeServer(x, banner_name)
+  end)
+  if not ok then
+    warn("[Summon] 呼叫遠端失敗:", err)
   end
-  local banner_btn = Scripttable.Summon.Gui.Container.Banners[banner_name].Button
-  firesignal(banner_btn.Activated)
-  local summon_key = x == 1 and "Summon1" or x == 10 and "Summon2" or "Summon3"
-  local Summon_btn = Scripttable.Summon.Gui.Container.Buttons[summon_key].Button
-  firesignal(Summon_btn.Activated)
 end
 
 -- ========================================================================== --
@@ -2287,14 +2289,56 @@ local function _colourNativeToggle(rarity, kind, isOn)
   end)
 end
 
--- 翻轉伺服器某 (rarity, kind) 的自動刪除，並依回傳值替原生按鈕上色（綠=開 / 紅=關）
-local function _applyAutoDelete(rarity, kind)
+-- 讀取遊戲中標準自動刪除的當前狀態 (true=開啟 / false=關閉 / nil=未知)
+local function _getGameAutoDeleteState(rarity, kind)
+  local ok, val = pcall(function()
+    local Constants = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Data"):WaitForChild("Constants"))
+    local ad = Constants.currentPlrData and Constants.currentPlrData.Summons and Constants.currentPlrData.Summons.AutoDelete
+    if ad and ad[kind] and ad[kind][rarity] ~= nil then
+      return ad[kind][rarity] == true
+    end
+  end)
+  if ok and val ~= nil then return val end
+
+  local Frame = Scripttable.Summon.Gui and Scripttable.Summon.Gui:FindFirstChild("AutoDelete")
+  if Frame then
+    local fok, fval = pcall(function()
+      local entry = Frame.Info.List:FindFirstChild(rarity)
+      if not entry then return nil end
+      local toggle = entry.Container.Toggle:FindFirstChild(kind)
+      if not toggle then return nil end
+      local grad = toggle:FindFirstChildWhichIsA("UIGradient", true)
+      if not grad or not grad.Color then return nil end
+      local kp = grad.Color.Keypoints
+      if kp and #kp > 0 then
+        local c = kp[1].Value
+        return c.G > c.R
+      end
+    end)
+    if fok and fval ~= nil then return fval end
+  end
+  return nil
+end
+
+-- 同步某 (rarity, kind) 的自動刪除至 targetState
+-- 若遊戲端當前狀態與 targetState 相同，則不重複呼叫 InvokeServer (避免 toggle 被關閉)
+local function _applyAutoDelete(rarity, kind, targetState)
   local AD = Scripttable.Summon.AutoDelete
+  if targetState == nil then
+    local key = (kind == "Shiny") and ("Shiny_" .. rarity) or rarity
+    targetState = AD.HIGH_TIER[key] == true
+  end
+  local current = _getGameAutoDeleteState(rarity, kind)
+  if current ~= nil and current == targetState then
+    _colourNativeToggle(rarity, kind, current)
+    return
+  end
+
   local ok, ret = pcall(function()
     return AD.Remote:InvokeServer(rarity, kind)
   end)
   if ok then
-    print(string.format("[AutoDelete] %s %s -> %s", rarity, kind, tostring(ret)))
+    print(string.format("[AutoDelete] %s %s (target:%s) -> %s", rarity, kind, tostring(targetState), tostring(ret)))
     _colourNativeToggle(rarity, kind, ret == true)
   end
 end
@@ -2317,23 +2361,55 @@ local function _colourMonkeyNativeToggle(rarity, kind, isOn)
   end)
 end
 
-local function _applyMonkeyAutoDelete(rarity, kind)
+-- 讀取遊戲中猴子自動刪除的當前狀態 (true=開啟 / false=關閉 / nil=未知)
+local function _getMonkeyGameAutoDeleteState(rarity, kind)
+  local Frame = UI.Frames:FindFirstChild("MonkeySummon") and UI.Frames.MonkeySummon:FindFirstChild("AutoDelete")
+  if Frame then
+    local fok, fval = pcall(function()
+      local entry = Frame.Info.List:FindFirstChild(rarity)
+      if not entry then return nil end
+      local toggle = entry.Container.Toggle:FindFirstChild(kind)
+      if not toggle then return nil end
+      local grad = toggle:FindFirstChildWhichIsA("UIGradient", true)
+      if not grad or not grad.Color then return nil end
+      local kp = grad.Color.Keypoints
+      if kp and #kp > 0 then
+        local c = kp[1].Value
+        return c.G > c.R
+      end
+    end)
+    if fok and fval ~= nil then return fval end
+  end
+  return nil
+end
+
+local function _applyMonkeyAutoDelete(rarity, kind, targetState)
   local AD = Scripttable.Summon.MonkeyAutoDelete
+  if targetState == nil then
+    local key = (kind == "Shiny") and ("Shiny_" .. rarity) or rarity
+    targetState = AD.HIGH_TIER[key] == true
+  end
+  local current = _getMonkeyGameAutoDeleteState(rarity, kind)
+  if current ~= nil and current == targetState then
+    _colourMonkeyNativeToggle(rarity, kind, current)
+    return
+  end
+
   local ok, ret = pcall(function()
     return AD.Remote:InvokeServer(rarity, kind, "Monkey")
   end)
   if ok then
-    print(string.format("[AutoDelete_EVENT_monkey] %s %s -> %s", rarity, kind, tostring(ret)))
+    print(string.format("[AutoDelete_EVENT_monkey] %s %s (target:%s) -> %s", rarity, kind, tostring(targetState), tostring(ret)))
     _colourMonkeyNativeToggle(rarity, kind, ret == true)
   end
 end
 
 local function _syncMonkeyAutoDelete()
-  local AD = Scripttable.Summon.MonkeyAutoDelete
+  local MAD = Scripttable.Summon.MonkeyAutoDelete
   task.spawn(function()
     for _, r in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
-      if AD.HIGH_TIER[r] then _applyMonkeyAutoDelete(r, "Normal") end
-      if AD.HIGH_TIER["Shiny_" .. r] then _applyMonkeyAutoDelete(r, "Shiny") end
+      _applyMonkeyAutoDelete(r, "Normal", MAD.HIGH_TIER[r] == true)
+      _applyMonkeyAutoDelete(r, "Shiny", MAD.HIGH_TIER["Shiny_" .. r] == true)
     end
   end)
 end
@@ -2342,8 +2418,8 @@ local function _syncAutoDelete()
   local AD = Scripttable.Summon.AutoDelete
   task.spawn(function()
     for _, r in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
-      if AD.HIGH_TIER[r] then _applyAutoDelete(r, "Normal") end
-      if AD.HIGH_TIER["Shiny_" .. r] then _applyAutoDelete(r, "Shiny") end
+      _applyAutoDelete(r, "Normal", AD.HIGH_TIER[r] == true)
+      _applyAutoDelete(r, "Shiny", AD.HIGH_TIER["Shiny_" .. r] == true)
     end
   end)
 end
@@ -2519,7 +2595,7 @@ for _, rarity in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
     Callback = function(self, Value)
       Scripttable.Summon.AutoDelete.HIGH_TIER[rarity] = Value
       if Scripttable.Summon.AutoDelete.enable then
-        task.spawn(_applyAutoDelete, rarity, "Normal")
+        task.spawn(_applyAutoDelete, rarity, "Normal", Value)
       end
     end,
   })
@@ -2532,7 +2608,7 @@ for _, rarity in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
     Callback = function(self, Value)
       Scripttable.Summon.AutoDelete.HIGH_TIER[shinyKey] = Value
       if Scripttable.Summon.AutoDelete.enable then
-        task.spawn(_applyAutoDelete, rarity, "Shiny")
+        task.spawn(_applyAutoDelete, rarity, "Shiny", Value)
       end
     end,
   })
@@ -2564,7 +2640,7 @@ for _, rarity in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
     Callback = function(self, Value)
       Scripttable.Summon.MonkeyAutoDelete.HIGH_TIER[rarity] = Value
       if Scripttable.Summon.MonkeyAutoDelete.enable then
-        task.spawn(_applyMonkeyAutoDelete, rarity, "Normal")
+        task.spawn(_applyMonkeyAutoDelete, rarity, "Normal", Value)
       end
     end,
   })
@@ -2577,7 +2653,7 @@ for _, rarity in ipairs({ "Common", "Rare", "Epic", "Legendary" }) do
     Callback = function(self, Value)
       Scripttable.Summon.MonkeyAutoDelete.HIGH_TIER[shinyKey] = Value
       if Scripttable.Summon.MonkeyAutoDelete.enable then
-        task.spawn(_applyMonkeyAutoDelete, rarity, "Shiny")
+        task.spawn(_applyMonkeyAutoDelete, rarity, "Shiny", Value)
       end
     end,
   })
