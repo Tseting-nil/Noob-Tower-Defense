@@ -2419,7 +2419,8 @@ local function generateScript(mode)
 		table.insert(fullLines, string.format("\tNTD.AutoReplay(%s)", "true"))
 	end
 	table.insert(fullLines, "\tNTD.Debug(false)")
-	if gameSettings.difficulty ~= "Unknown" and gameStartMapId ~= "Moon" then
+	local isSpecialMode = type(gameSettings.difficulty) == "string" and (gameSettings.difficulty:match("^MonkeyBananza%d+$") or gameSettings.difficulty:match("^FactoryMeltdown%d+$"))
+	if gameSettings.difficulty ~= "Unknown" and gameStartMapId ~= "Moon" and not isSpecialMode then
 		table.insert(fullLines, string.format('\tNTD.Difficulty("%s")', gameSettings.difficulty))
 	end
 	table.insert(fullLines, "")
@@ -2910,7 +2911,8 @@ confirmSaveBtn.MouseButton1Click:Connect(function()
 		local s = generateScript()
 		if s then
 			local saveName = fileName
-			if (gameStartMapId == "Moon" or gameSettings.mapId == "Moon") then
+			local isSpecialMode = type(gameSettings.difficulty) == "string" and (gameSettings.difficulty:match("^MonkeyBananza%d+$") or gameSettings.difficulty:match("^FactoryMeltdown%d+$"))
+			if (gameStartMapId == "Moon" or gameSettings.mapId == "Moon" or isSpecialMode) then
 				saveName = fileName .. "_Full"
 			end
 			local ok = saveScriptToFile(saveName, s)
